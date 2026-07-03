@@ -29,6 +29,7 @@ import Crediario from '@/pages/Crediario';
 import Fornecedores from '@/pages/Fornecedores';
 import NFe from '@/pages/NFe';
 import Relatorios from '@/pages/Relatorios';
+import Historico from '@/pages/Historico';
 import Configuracoes from '@/pages/Configuracoes';
 import Login from '@/pages/Login';
 import Register from '@/pages/Register';
@@ -83,6 +84,7 @@ const AuthenticatedApp = () => {
           <Route path="/fornecedores" element={<Fornecedores />} />
           <Route path="/nfe" element={<NFe />} />
           <Route path="/relatorios" element={<Relatorios />} />
+          <Route path="/historico" element={<Historico />} />
           <Route path="/configuracoes" element={<Configuracoes />} />
         </Route>
       </Route>

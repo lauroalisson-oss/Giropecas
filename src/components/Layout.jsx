@@ -5,7 +5,7 @@ import { useCompany } from '@/lib/CompanyContext';
 import {
   LayoutDashboard, Users, Car, Package, Wrench, ClipboardList,
   ShoppingCart, CreditCard, FileText, BarChart3, Settings,
-  LogOut, Menu, X, Bell, ChevronDown, Truck, Building2
+  LogOut, Menu, X, Bell, ChevronDown, Truck, Building2, History
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -27,6 +27,7 @@ const navItems = [
   { path: '/crediario', label: 'Crediário', icon: CreditCard },
   { path: '/fornecedores', label: 'Fornecedores', icon: Truck },
   { path: '/nfe', label: 'NF-e', icon: FileText },
+  { path: '/historico', label: 'Histórico', icon: History },
   { path: '/relatorios', label: 'Relatórios', icon: BarChart3 },
   { path: '/configuracoes', label: 'Configurações', icon: Settings },
 ];

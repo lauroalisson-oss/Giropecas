@@ -8,16 +8,20 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Search, Package, Trash2, ShoppingCart, CheckCircle, Plus, Minus, CreditCard } from 'lucide-react';
+import { Search, Package, Trash2, ShoppingCart, CheckCircle, Plus, Minus, CreditCard, PlusCircle, X } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 
-const PAYMENT_METHODS = [
+const ALL_METHODS = [
   { value: 'dinheiro', label: 'Dinheiro' },
   { value: 'cartao_debito', label: 'Débito' },
   { value: 'cartao_credito', label: 'Crédito' },
   { value: 'pix', label: 'PIX' },
   { value: 'crediario', label: 'Crediário' },
 ];
+
+function newPayment() {
+  return { method: 'dinheiro', amount: 0, installments: 1, brand: '', machine: 'Geral (todas)' };
+}
 
 export default function PDV() {
   const { company } = useCompany();
@@ -26,33 +30,34 @@ export default function PDV() {
 
   const [parts, setParts] = useState([]);
   const [customers, setCustomers] = useState([]);
+  const [cardRates, setCardRates] = useState([]);
   const [cart, setCart] = useState([]);
   const [search, setSearch] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('dinheiro');
+  const [discount, setDiscount] = useState(0);
+  const [payments, setPayments] = useState([{ ...newPayment() }]);
+  // Crediario extra
   const [installments, setInstallments] = useState(2);
   const [interestRate, setInterestRate] = useState(0);
   const [downPayment, setDownPayment] = useState(0);
-  const [discount, setDiscount] = useState(0);
-  const [step, setStep] = useState('cart'); // cart | payment | success
+  const [step, setStep] = useState('cart');
   const [saving, setSaving] = useState(false);
-  const [lastSaleId, setLastSaleId] = useState(null);
 
   useEffect(() => {
     if (company?.id) loadData();
   }, [company]);
 
-  useEffect(() => {
-    searchRef.current?.focus();
-  }, []);
+  useEffect(() => { searchRef.current?.focus(); }, []);
 
   const loadData = async () => {
-    const [pts, custs] = await Promise.all([
+    const [pts, custs, cr] = await Promise.all([
       base44.entities.Part.filter({ company_id: company.id, is_active: true }),
       base44.entities.Customer.filter({ company_id: company.id, is_active: true }),
+      base44.entities.CardRate.filter({ company_id: company.id }),
     ]);
     setParts(pts);
     setCustomers(custs);
+    setCardRates(cr);
   };
 
   const filteredParts = search.length > 1 ? parts.filter(p =>
@@ -74,7 +79,7 @@ export default function PDV() {
         }
         return prev.map(i => i.part_id === part.id ? { ...i, quantity: i.quantity + 1, total_price: (i.quantity + 1) * i.unit_price } : i);
       }
-      return [...prev, { part_id: part.id, description: part.description, sku: part.sku, quantity: 1, unit_price: part.sale_price, total_price: part.sale_price, max_stock: part.stock_quantity }];
+      return [...prev, { part_id: part.id, description: part.description, sku: part.sku, quantity: 1, unit_price: part.sale_price, total_price: part.sale_price, cost_price: part.cost_price || 0, max_stock: part.stock_quantity }];
     });
     setSearch('');
     searchRef.current?.focus();
@@ -89,14 +94,49 @@ export default function PDV() {
 
   const subtotal = cart.reduce((s, i) => s + i.total_price, 0);
   const total = subtotal - (parseFloat(discount) || 0);
+
+  // Card fee logic
+  const getCardFee = (payment) => {
+    if (payment.method !== 'cartao_credito' && payment.method !== 'cartao_debito') return 0;
+    const rate = cardRates.find(r =>
+      (r.brand === payment.brand || !payment.brand || r.brand === 'Outras') &&
+      (r.machine === payment.machine || r.machine === 'Geral (todas)')
+    ) || cardRates.find(r => r.machine === 'Geral (todas)');
+    if (!rate) return 0;
+    if (payment.method === 'cartao_debito') return (payment.amount * (rate.debit_rate || 0)) / 100;
+    const creditRate = rate.credit_rates?.[String(payment.installments)] || 0;
+    return (payment.amount * creditRate) / 100;
+  };
+
+  const totalPaid = payments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
+  const totalFees = payments.reduce((s, p) => s + getCardFee(p), 0);
+  const change = totalPaid - total;
+
+  const addPayment = () => setPayments(prev => [...prev, { ...newPayment(), amount: Math.max(0, total - totalPaid) }]);
+  const removePayment = (idx) => setPayments(prev => prev.filter((_, i) => i !== idx));
+  const updatePayment = (idx, field, value) => setPayments(prev => prev.map((p, i) => i === idx ? { ...p, [field]: value } : p));
+
+  // Auto-fill first payment amount when total changes
+  useEffect(() => {
+    if (payments.length === 1) {
+      setPayments([{ ...payments[0], amount: total }]);
+    }
+  }, [total]);
+
+  const hasCrediario = payments.some(p => p.method === 'crediario');
   const remainingForCredit = total - (parseFloat(downPayment) || 0);
   const installmentAmount = installments > 0 ? (remainingForCredit * (1 + interestRate / 100)) / installments : 0;
 
   const handleCheckout = async () => {
     if (cart.length === 0) { toast({ title: 'Carrinho vazio', variant: 'destructive' }); return; }
-    if (paymentMethod === 'crediario' && !selectedCustomer) { toast({ title: 'Selecione o cliente para crediário', variant: 'destructive' }); return; }
+    if (hasCrediario && !selectedCustomer) { toast({ title: 'Selecione o cliente para crediário', variant: 'destructive' }); return; }
+    if (Math.abs(totalPaid - total) > 0.01 && !hasCrediario) {
+      toast({ title: 'Valor pago não confere com o total', description: `Total: ${formatCurrency(total)} | Pago: ${formatCurrency(totalPaid)}`, variant: 'destructive' });
+      return;
+    }
     setSaving(true);
     try {
+      const primaryMethod = payments.length === 1 ? payments[0].method : 'misto';
       const sale = await base44.entities.Sale.create({
         company_id: company.id,
         customer_id: selectedCustomer || null,
@@ -105,8 +145,8 @@ export default function PDV() {
         subtotal,
         discount: parseFloat(discount) || 0,
         total,
-        payment_method: paymentMethod,
-        payment_details: paymentMethod === 'crediario' ? { downPayment, installments, interestRate } : {},
+        payment_method: primaryMethod,
+        payment_details: { payments, downPayment, installments, interestRate, totalFees },
         status: 'pago',
       });
 
@@ -125,8 +165,8 @@ export default function PDV() {
         }
       }
 
-      // Generate credit titles
-      if (paymentMethod === 'crediario') {
+      // Generate credit titles for crediario payment
+      if (hasCrediario) {
         const today = new Date();
         for (let i = 0; i < installments; i++) {
           const dueDate = new Date(today);
@@ -142,14 +182,21 @@ export default function PDV() {
         }
       }
 
-      // Accounting
+      // Accounting: revenue net of fees
       await base44.entities.AccountingEntry.create({
         company_id: company.id, date: new Date().toISOString().split('T')[0],
         type: 'credit', category: 'Vendas PDV', description: 'Venda PDV',
         amount: total, reference_id: sale.id, reference_type: 'sale',
       });
 
-      setLastSaleId(sale.id);
+      if (totalFees > 0) {
+        await base44.entities.AccountingEntry.create({
+          company_id: company.id, date: new Date().toISOString().split('T')[0],
+          type: 'debit', category: 'Taxas de Cartão', description: 'Taxa maquininha PDV',
+          amount: totalFees, reference_id: sale.id, reference_type: 'sale',
+        });
+      }
+
       setStep('success');
       loadData();
     } catch (e) {
@@ -160,7 +207,7 @@ export default function PDV() {
   };
 
   const resetPDV = () => {
-    setCart([]); setSearch(''); setDiscount(0); setPaymentMethod('dinheiro');
+    setCart([]); setSearch(''); setDiscount(0); setPayments([{ ...newPayment() }]);
     setSelectedCustomer(''); setInstallments(2); setDownPayment(0); setStep('cart');
     searchRef.current?.focus();
   };
@@ -172,10 +219,9 @@ export default function PDV() {
           <CheckCircle className="w-10 h-10 text-green-600" />
         </div>
         <h2 className="text-2xl font-bold text-gray-900 mb-2">Venda Confirmada!</h2>
-        <p className="text-gray-500 mb-8">Pagamento registrado com sucesso</p>
-        <div className="flex gap-3">
-          <Button onClick={resetPDV} className="bg-red-600 hover:bg-red-700 text-white">Nova Venda</Button>
-        </div>
+        <p className="text-gray-500 mb-2">Pagamento registrado com sucesso</p>
+        {totalFees > 0 && <p className="text-sm text-orange-600 mb-6">Taxa de cartão: {formatCurrency(totalFees)} descontada do lucro</p>}
+        <Button onClick={resetPDV} className="bg-red-600 hover:bg-red-700 text-white">Nova Venda</Button>
       </div>
     );
   }
@@ -188,13 +234,13 @@ export default function PDV() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-        {/* Left: Search */}
+        {/* Left: Search + Cart */}
         <div className="lg:col-span-3 space-y-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
             <Input
               ref={searchRef}
-              placeholder="Buscar peça por nome ou SKU... (F2)"
+              placeholder="Buscar peça por nome ou SKU..."
               value={search}
               onChange={e => setSearch(e.target.value)}
               className="pl-11 h-12 text-base"
@@ -225,10 +271,6 @@ export default function PDV() {
             </Card>
           )}
 
-          {search.length > 1 && filteredParts.length === 0 && (
-            <div className="text-center py-8 text-gray-400">Nenhuma peça encontrada para "{search}"</div>
-          )}
-
           {cart.length === 0 && search.length <= 1 && (
             <div className="text-center py-16">
               <ShoppingCart className="w-16 h-16 text-gray-200 mx-auto mb-4" />
@@ -236,10 +278,9 @@ export default function PDV() {
             </div>
           )}
 
-          {/* Cart items */}
           {cart.length > 0 && (
             <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm">Itens no Carrinho ({cart.length})</CardTitle></CardHeader>
+              <CardHeader className="pb-2"><CardTitle className="text-sm">Itens ({cart.length})</CardTitle></CardHeader>
               <CardContent className="p-0 divide-y">
                 {cart.map(item => (
                   <div key={item.part_id} className="flex items-center gap-3 px-4 py-3">
@@ -272,7 +313,9 @@ export default function PDV() {
         {/* Right: Payment */}
         <div className="lg:col-span-2 space-y-4">
           <Card>
-            <CardHeader className="pb-3"><CardTitle className="text-sm flex items-center gap-2"><CreditCard className="w-4 h-4" />Pagamento</CardTitle></CardHeader>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm flex items-center gap-2"><CreditCard className="w-4 h-4" />Pagamento</CardTitle>
+            </CardHeader>
             <CardContent className="space-y-4">
               <div>
                 <Label className="text-xs">Cliente (opcional)</Label>
@@ -286,45 +329,114 @@ export default function PDV() {
               </div>
 
               <div>
-                <Label className="text-xs">Forma de pagamento</Label>
-                <div className="grid grid-cols-3 gap-1 mt-1">
-                  {PAYMENT_METHODS.map(m => (
-                    <button key={m.value} onClick={() => setPaymentMethod(m.value)}
-                      className={`py-2 px-1 text-xs font-medium rounded-lg border-2 transition-colors ${paymentMethod === m.value ? 'border-red-600 bg-red-50 text-red-700' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>
-                      {m.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
                 <Label className="text-xs">Desconto (R$)</Label>
                 <Input className="mt-1" type="number" min="0" step="0.01" value={discount}
                   onChange={e => setDiscount(e.target.value)} />
               </div>
 
-              {paymentMethod === 'crediario' && (
-                <div className="space-y-2 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
-                  <p className="text-xs font-semibold text-yellow-800">Crediário</p>
-                  <div>
-                    <Label className="text-xs">Entrada (R$)</Label>
-                    <Input className="mt-1" type="number" min="0" step="0.01" value={downPayment} onChange={e => setDownPayment(e.target.value)} />
-                  </div>
-                  <div>
-                    <Label className="text-xs">Parcelas</Label>
-                    <Input className="mt-1" type="number" min="1" max="24" value={installments} onChange={e => setInstallments(parseInt(e.target.value) || 1)} />
-                  </div>
-                  <div className="text-xs text-yellow-700 font-medium">
-                    {installments}x de {formatCurrency(installmentAmount)}
-                  </div>
+              {/* Multiple payments */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <Label className="text-xs">Formas de pagamento</Label>
+                  <button onClick={addPayment} className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1">
+                    <PlusCircle className="w-3 h-3" />Adicionar
+                  </button>
                 </div>
-              )}
+                <div className="space-y-3">
+                  {payments.map((pay, idx) => (
+                    <div key={idx} className="p-3 bg-gray-50 rounded-lg border space-y-2">
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1">
+                          <div className="grid grid-cols-3 gap-1">
+                            {ALL_METHODS.map(m => (
+                              <button key={m.value} onClick={() => updatePayment(idx, 'method', m.value)}
+                                className={`py-1.5 px-1 text-xs font-medium rounded-md border transition-colors ${pay.method === m.value ? 'border-red-600 bg-red-50 text-red-700' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>
+                                {m.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        {payments.length > 1 && (
+                          <button onClick={() => removePayment(idx)} className="text-gray-400 hover:text-red-500">
+                            <X className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+
+                      <div>
+                        <Label className="text-xs">Valor (R$)</Label>
+                        <Input className="mt-0.5 h-8" type="number" min="0" step="0.01"
+                          value={pay.amount} onChange={e => updatePayment(idx, 'amount', parseFloat(e.target.value) || 0)} />
+                      </div>
+
+                      {(pay.method === 'cartao_credito' || pay.method === 'cartao_debito') && (
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <Label className="text-xs">Bandeira</Label>
+                            <Select value={pay.brand || 'none'} onValueChange={v => updatePayment(idx, 'brand', v === 'none' ? '' : v)}>
+                              <SelectTrigger className="mt-0.5 h-8 text-xs"><SelectValue placeholder="Bandeira" /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">Qualquer</SelectItem>
+                                {['Visa', 'Mastercard', 'Elo', 'Amex', 'Hipercard'].map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          {pay.method === 'cartao_credito' && (
+                            <div>
+                              <Label className="text-xs">Parcelas</Label>
+                              <Select value={String(pay.installments || 1)} onValueChange={v => updatePayment(idx, 'installments', parseInt(v))}>
+                                <SelectTrigger className="mt-0.5 h-8 text-xs"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  {Array.from({ length: 21 }, (_, i) => i + 1).map(n => <SelectItem key={n} value={String(n)}>{n}x</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Fee preview */}
+                      {(pay.method === 'cartao_credito' || pay.method === 'cartao_debito') && getCardFee(pay) > 0 && (
+                        <p className="text-xs text-orange-600">Taxa: -{formatCurrency(getCardFee(pay))}</p>
+                      )}
+
+                      {/* Crediario extra */}
+                      {pay.method === 'crediario' && (
+                        <div className="space-y-2 pt-2 border-t border-gray-200">
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <Label className="text-xs">Entrada (R$)</Label>
+                              <Input className="mt-0.5 h-8" type="number" min="0" step="0.01"
+                                value={downPayment} onChange={e => setDownPayment(e.target.value)} />
+                            </div>
+                            <div>
+                              <Label className="text-xs">Parcelas</Label>
+                              <Input className="mt-0.5 h-8" type="number" min="1" max="24"
+                                value={installments} onChange={e => setInstallments(parseInt(e.target.value) || 1)} />
+                            </div>
+                          </div>
+                          <p className="text-xs text-yellow-700 font-medium">{installments}x de {formatCurrency(installmentAmount)}</p>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
 
               {/* Totals */}
               <div className="border-t pt-3 space-y-1 text-sm">
                 <div className="flex justify-between text-gray-600"><span>Subtotal</span><span>{formatCurrency(subtotal)}</span></div>
                 {parseFloat(discount) > 0 && <div className="flex justify-between text-green-600"><span>Desconto</span><span>-{formatCurrency(parseFloat(discount))}</span></div>}
                 <div className="flex justify-between font-bold text-lg"><span>Total</span><span className="text-red-600">{formatCurrency(total)}</span></div>
+                {totalFees > 0 && <div className="flex justify-between text-orange-600 text-xs"><span>Taxa cartão</span><span>-{formatCurrency(totalFees)}</span></div>}
+                {payments.length > 1 && (
+                  <div className={`flex justify-between text-xs font-medium ${Math.abs(totalPaid - total) < 0.01 ? 'text-green-600' : 'text-red-500'}`}>
+                    <span>Pago</span><span>{formatCurrency(totalPaid)}</span>
+                  </div>
+                )}
+                {change > 0.01 && payments.length === 1 && payments[0].method === 'dinheiro' && (
+                  <div className="flex justify-between text-green-600 text-xs"><span>Troco</span><span>{formatCurrency(change)}</span></div>
+                )}
               </div>
 
               <Button onClick={handleCheckout} disabled={saving || cart.length === 0}

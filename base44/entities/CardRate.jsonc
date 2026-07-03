@@ -1,0 +1,28 @@
+{
+  "type": "object",
+  "properties": {
+    "company_id": {
+      "type": "string"
+    },
+    "brand": {
+      "type": "string"
+    },
+    "machine": {
+      "type": "string",
+      "default": "Geral (todas)"
+    },
+    "debit_rate": {
+      "type": "number",
+      "default": 0
+    },
+    "credit_rates": {
+      "type": "object",
+      "description": "Key: installment number (1-21), value: rate percent"
+    }
+  },
+  "required": [
+    "company_id",
+    "brand"
+  ],
+  "name": "CardRate"
+}

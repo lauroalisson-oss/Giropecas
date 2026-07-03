@@ -9,7 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
-import { Building2, Users, FileText, Settings, Save } from 'lucide-react';
+import { Building2, Users, FileText, CreditCard, Save } from 'lucide-react';
+import TaxasCartao from './TaxasCartao';
 import { useToast } from '@/components/ui/use-toast';
 
 export default function Configuracoes() {
@@ -85,10 +86,11 @@ export default function Configuracoes() {
       )}
 
       <Tabs defaultValue="empresa">
-        <TabsList className="mb-4">
+        <TabsList className="mb-4 flex-wrap h-auto gap-1">
           <TabsTrigger value="empresa">Empresa</TabsTrigger>
           <TabsTrigger value="fiscal">Fiscal & NF-e</TabsTrigger>
           <TabsTrigger value="crediario">Crediário</TabsTrigger>
+          <TabsTrigger value="cartao" className="flex items-center gap-1"><CreditCard className="w-3 h-3" />Taxas de Cartão</TabsTrigger>
           <TabsTrigger value="usuarios">Usuários</TabsTrigger>
         </TabsList>
 
@@ -215,6 +217,10 @@ export default function Configuracoes() {
               </Button>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="cartao">
+          <TaxasCartao />
         </TabsContent>
 
         <TabsContent value="usuarios">

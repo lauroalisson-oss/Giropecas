@@ -1,0 +1,58 @@
+{
+  "type": "object",
+  "properties": {
+    "company_id": {
+      "type": "string"
+    },
+    "part_id": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "entrada",
+        "saida",
+        "ajuste",
+        "devolucao"
+      ],
+      "default": "saida"
+    },
+    "quantity": {
+      "type": "number"
+    },
+    "unit_cost": {
+      "type": "number"
+    },
+    "reason": {
+      "type": "string"
+    },
+    "reference_id": {
+      "type": "string"
+    },
+    "reference_type": {
+      "type": "string",
+      "enum": [
+        "work_order",
+        "sale",
+        "purchase",
+        "manual"
+      ]
+    },
+    "previous_stock": {
+      "type": "number"
+    },
+    "new_stock": {
+      "type": "number"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "company_id",
+    "part_id",
+    "type",
+    "quantity"
+  ],
+  "name": "StockMovement"
+}

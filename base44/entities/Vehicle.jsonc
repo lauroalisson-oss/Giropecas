@@ -1,0 +1,48 @@
+{
+  "type": "object",
+  "properties": {
+    "company_id": {
+      "type": "string"
+    },
+    "customer_id": {
+      "type": "string"
+    },
+    "brand": {
+      "type": "string"
+    },
+    "model": {
+      "type": "string"
+    },
+    "year": {
+      "type": "number"
+    },
+    "plate": {
+      "type": "string"
+    },
+    "chassis": {
+      "type": "string"
+    },
+    "color": {
+      "type": "string"
+    },
+    "current_km": {
+      "type": "number"
+    },
+    "engine": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    }
+  },
+  "required": [
+    "company_id",
+    "customer_id",
+    "model"
+  ],
+  "name": "Vehicle"
+}

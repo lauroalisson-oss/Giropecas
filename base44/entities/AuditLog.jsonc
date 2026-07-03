@@ -1,0 +1,41 @@
+{
+  "type": "object",
+  "properties": {
+    "company_id": {
+      "type": "string"
+    },
+    "user_id": {
+      "type": "string"
+    },
+    "user_name": {
+      "type": "string"
+    },
+    "action": {
+      "type": "string"
+    },
+    "entity_type": {
+      "type": "string"
+    },
+    "entity_id": {
+      "type": "string"
+    },
+    "previous_data": {
+      "type": "object"
+    },
+    "new_data": {
+      "type": "object"
+    },
+    "ip_address": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "company_id",
+    "action",
+    "entity_type"
+  ],
+  "name": "AuditLog"
+}

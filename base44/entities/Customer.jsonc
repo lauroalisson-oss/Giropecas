@@ -1,0 +1,68 @@
+{
+  "type": "object",
+  "properties": {
+    "company_id": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "fisica",
+        "juridica"
+      ],
+      "default": "fisica"
+    },
+    "tax_id": {
+      "type": "string"
+    },
+    "phone": {
+      "type": "string"
+    },
+    "email": {
+      "type": "string"
+    },
+    "address": {
+      "type": "string"
+    },
+    "city": {
+      "type": "string"
+    },
+    "state": {
+      "type": "string"
+    },
+    "zip_code": {
+      "type": "string"
+    },
+    "credit_limit": {
+      "type": "number",
+      "default": 0
+    },
+    "credit_balance": {
+      "type": "number",
+      "default": 0
+    },
+    "notes": {
+      "type": "string"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    },
+    "lgpd_consent": {
+      "type": "boolean",
+      "default": false
+    },
+    "lgpd_consent_date": {
+      "type": "string",
+      "format": "date"
+    }
+  },
+  "required": [
+    "company_id",
+    "name"
+  ],
+  "name": "Customer"
+}

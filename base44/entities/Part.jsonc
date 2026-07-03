@@ -1,0 +1,79 @@
+{
+  "type": "object",
+  "properties": {
+    "company_id": {
+      "type": "string"
+    },
+    "sku": {
+      "type": "string"
+    },
+    "internal_code": {
+      "type": "string"
+    },
+    "ncm": {
+      "type": "string"
+    },
+    "cfop_default": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "unit": {
+      "type": "string",
+      "enum": [
+        "un",
+        "pc",
+        "kg",
+        "lt",
+        "cx"
+      ],
+      "default": "un"
+    },
+    "cost_price": {
+      "type": "number",
+      "default": 0
+    },
+    "sale_price": {
+      "type": "number",
+      "default": 0
+    },
+    "margin_percent": {
+      "type": "number",
+      "default": 0
+    },
+    "stock_quantity": {
+      "type": "number",
+      "default": 0
+    },
+    "min_stock": {
+      "type": "number",
+      "default": 1
+    },
+    "location": {
+      "type": "string"
+    },
+    "supplier_id": {
+      "type": "string"
+    },
+    "lead_time_days": {
+      "type": "number",
+      "default": 1
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    },
+    "brand": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "company_id",
+    "description"
+  ],
+  "name": "Part"
+}

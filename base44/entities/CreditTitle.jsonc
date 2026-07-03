@@ -1,0 +1,72 @@
+{
+  "type": "object",
+  "properties": {
+    "company_id": {
+      "type": "string"
+    },
+    "customer_id": {
+      "type": "string"
+    },
+    "sale_id": {
+      "type": "string"
+    },
+    "title_number": {
+      "type": "string"
+    },
+    "installment_number": {
+      "type": "number"
+    },
+    "total_installments": {
+      "type": "number"
+    },
+    "original_amount": {
+      "type": "number"
+    },
+    "interest_amount": {
+      "type": "number",
+      "default": 0
+    },
+    "total_amount": {
+      "type": "number"
+    },
+    "paid_amount": {
+      "type": "number",
+      "default": 0
+    },
+    "remaining_amount": {
+      "type": "number"
+    },
+    "due_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "payment_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "a_vencer",
+        "vencido",
+        "pago",
+        "pago_parcial",
+        "cancelado"
+      ],
+      "default": "a_vencer"
+    },
+    "payment_method": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "company_id",
+    "customer_id",
+    "total_amount",
+    "due_date"
+  ],
+  "name": "CreditTitle"
+}

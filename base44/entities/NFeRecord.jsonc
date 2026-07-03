@@ -1,0 +1,81 @@
+{
+  "type": "object",
+  "properties": {
+    "company_id": {
+      "type": "string"
+    },
+    "sale_id": {
+      "type": "string"
+    },
+    "work_order_id": {
+      "type": "string"
+    },
+    "customer_id": {
+      "type": "string"
+    },
+    "number": {
+      "type": "string"
+    },
+    "series": {
+      "type": "string",
+      "default": "1"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "rascunho",
+        "validando",
+        "enviada",
+        "autorizada",
+        "rejeitada",
+        "cancelada"
+      ],
+      "default": "rascunho"
+    },
+    "xml_content": {
+      "type": "string"
+    },
+    "protocol": {
+      "type": "string"
+    },
+    "danfe_url": {
+      "type": "string"
+    },
+    "xml_url": {
+      "type": "string"
+    },
+    "rejection_reason": {
+      "type": "string"
+    },
+    "emitted_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "authorized_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "total_amount": {
+      "type": "number"
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "taxes": {
+      "type": "object"
+    },
+    "cfop": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "company_id"
+  ],
+  "name": "NFeRecord"
+}

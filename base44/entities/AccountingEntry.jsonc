@@ -1,0 +1,58 @@
+{
+  "type": "object",
+  "properties": {
+    "company_id": {
+      "type": "string"
+    },
+    "date": {
+      "type": "string",
+      "format": "date"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "debit",
+        "credit"
+      ],
+      "default": "credit"
+    },
+    "category": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "amount": {
+      "type": "number"
+    },
+    "reference_id": {
+      "type": "string"
+    },
+    "reference_type": {
+      "type": "string",
+      "enum": [
+        "sale",
+        "payment",
+        "purchase",
+        "manual",
+        "tax"
+      ]
+    },
+    "account_code": {
+      "type": "string"
+    },
+    "balance_after": {
+      "type": "number"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "company_id",
+    "date",
+    "type",
+    "amount"
+  ],
+  "name": "AccountingEntry"
+}

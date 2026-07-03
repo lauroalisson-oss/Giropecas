@@ -12,6 +12,7 @@ import {
   ArrowRight, CheckCircle2, Clock
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
+import FinancialPanel from '@/components/FinancialPanel';
 
 export default function Dashboard() {
   const { company } = useCompany();
@@ -133,6 +134,11 @@ export default function Dashboard() {
             </Card>
           </Link>
         ))}
+      </div>
+
+      {/* Financial Panel */}
+      <div className="mb-6">
+        <FinancialPanel />
       </div>
 
       {/* Charts + Lists */}

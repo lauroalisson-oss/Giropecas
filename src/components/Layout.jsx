@@ -2,10 +2,12 @@ import React, { useState } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/lib/AuthContext';
 import { useCompany } from '@/lib/CompanyContext';
+import { useLicense } from '@/lib/LicenseContext';
+import { daysRemaining } from '@/lib/license';
 import {
   LayoutDashboard, Users, Car, Package, Wrench, ClipboardList,
   ShoppingCart, CreditCard, FileText, BarChart3, Settings,
-  LogOut, Menu, X, Bell, ChevronDown, Truck, Building2, History, HardHat
+  LogOut, Menu, X, Bell, ChevronDown, Truck, History, HardHat, KeyRound
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -36,16 +38,22 @@ const navItems = [
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
-  const { currentUser, logout } = useAuth();
+  const { user, logout } = useAuth();
   const { company } = useCompany();
+  const { superAdmin, license } = useLicense();
 
   const handleLogout = () => {
     logout('/login');
   };
 
-  const initials = currentUser?.full_name
-    ? currentUser.full_name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()
-    : 'U';
+  const displayName = user?.full_name || user?.email || 'Usuário';
+  const initials = displayName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+
+  const visibleNavItems = superAdmin
+    ? [...navItems, { path: '/admin/chaves', label: 'Chaves de Acesso', icon: KeyRound }]
+    : navItems;
+
+  const licenseDays = license?.expires_at ? daysRemaining(license.expires_at) : null;
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
@@ -82,7 +90,7 @@ export default function Layout() {
         {/* Nav */}
         <nav className="flex-1 overflow-y-auto py-4 px-3">
           <div className="space-y-0.5">
-            {navItems.map(({ path, label, icon: Icon }) => {
+            {visibleNavItems.map(({ path, label, icon: Icon }) => {
               const isActive = path === '/' ? location.pathname === '/' : location.pathname.startsWith(path);
               return (
                 <Link
@@ -113,8 +121,8 @@ export default function Layout() {
                   <AvatarFallback className="bg-red-600 text-white text-xs">{initials}</AvatarFallback>
                 </Avatar>
                 <div className="min-w-0 text-left flex-1">
-                  <p className="text-white text-xs font-medium truncate">{currentUser?.full_name || 'Usuário'}</p>
-                  <p className="text-gray-500 text-xs truncate">{currentUser?.role || 'admin'}</p>
+                  <p className="text-white text-xs font-medium truncate">{displayName}</p>
+                  <p className="text-gray-500 text-xs truncate">{superAdmin ? 'super-admin' : (user?.role || 'user')}</p>
                 </div>
                 <ChevronDown className="w-4 h-4 text-gray-500 flex-shrink-0" />
               </button>
@@ -143,6 +151,15 @@ export default function Layout() {
             <Menu className="w-5 h-5" />
           </button>
           <div className="flex-1" />
+          {licenseDays !== null && (
+            <Badge variant="outline" className={cn(
+              "hidden sm:inline-flex gap-1 font-normal",
+              licenseDays <= 5 ? "border-red-300 text-red-600" : "border-gray-200 text-gray-500"
+            )}>
+              <KeyRound className="w-3 h-3" />
+              Licença: {licenseDays} {licenseDays === 1 ? 'dia' : 'dias'}
+            </Badge>
+          )}
           <Link to="/ordens/nova">
             <Button size="sm" className="bg-red-600 hover:bg-red-700 text-white hidden sm:flex">
               <ClipboardList className="w-4 h-4 mr-2" />Nova OS

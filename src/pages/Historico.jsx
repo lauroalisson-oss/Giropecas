@@ -9,8 +9,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Search, Download, ClipboardList, ShoppingCart, Filter, X } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Search, Download, ClipboardList, ShoppingCart, Filter, X, Trash2, Edit2, AlertTriangle } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { useToast } from '@/components/ui/use-toast';
 
 const STATUS_COLORS = {
   aberta: 'bg-blue-100 text-blue-700',
@@ -45,6 +47,8 @@ function exportCSV(rows, filename) {
 
 export default function Historico() {
   const { company } = useCompany();
+  const { toast } = useToast();
+  const navigate = useNavigate();
 
   const [orders, setOrders] = useState([]);
   const [sales, setSales] = useState([]);
@@ -61,6 +65,10 @@ export default function Historico() {
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterPayment, setFilterPayment] = useState('all');
   const [search, setSearch] = useState('');
+
+  // Delete confirm
+  const [confirmDelete, setConfirmDelete] = useState(null); // { type: 'order'|'sale', item }
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (company?.id) loadData();
@@ -85,7 +93,7 @@ export default function Historico() {
 
   const customerMap = Object.fromEntries(customers.map(c => [c.id, c.name]));
   const serviceMap = Object.fromEntries(services.map(s => [s.id, s.name]));
-  const partMap = Object.fromEntries(parts.map(p => [p.id, p.description]));
+  const partMap = Object.fromEntries(parts.map(p => [p.id, { description: p.description, stock: p.stock_quantity }]));
 
   const inDateRange = (dateStr) => {
     if (!dateStr) return true;
@@ -95,41 +103,36 @@ export default function Historico() {
     return true;
   };
 
-  // --- OS filters ---
+  // Separate OS sales from PDV sales
+  const osSales = sales.filter(s => s.type === 'os');
+  const pdvSales = sales.filter(s => s.type === 'pdv');
+
   const filteredOrders = orders.filter(o => {
     if (!inDateRange(o.created_date)) return false;
     if (filterStatus !== 'all' && o.status !== filterStatus) return false;
     if (filterService !== 'all') {
-      const hasService = (o.service_items || []).some(si => si.service_id === filterService);
-      if (!hasService) return false;
+      if (!(o.service_items || []).some(si => si.service_id === filterService)) return false;
     }
     if (filterPart !== 'all') {
-      const hasPart = (o.parts_items || []).some(pi => pi.part_id === filterPart);
-      if (!hasPart) return false;
+      if (!(o.parts_items || []).some(pi => pi.part_id === filterPart)) return false;
     }
     if (search) {
       const s = search.toLowerCase();
-      const matchName = customerMap[o.customer_id]?.toLowerCase().includes(s);
-      const matchNum = o.order_number?.toLowerCase().includes(s);
-      if (!matchName && !matchNum) return false;
+      if (!customerMap[o.customer_id]?.toLowerCase().includes(s) && !o.order_number?.toLowerCase().includes(s)) return false;
     }
     return true;
   });
 
-  // --- PDV/Sale filters ---
-  const filteredSales = sales.filter(s => {
+  const filteredPdvSales = pdvSales.filter(s => {
     if (!inDateRange(s.created_date)) return false;
     if (filterStatus !== 'all' && s.status !== filterStatus) return false;
     if (filterPayment !== 'all' && s.payment_method !== filterPayment) return false;
     if (filterPart !== 'all') {
-      const hasPart = (s.items || []).some(i => i.part_id === filterPart || i.id === filterPart);
-      if (!hasPart) return false;
+      if (!(s.items || []).some(i => i.part_id === filterPart || i.id === filterPart)) return false;
     }
     if (search) {
       const q = search.toLowerCase();
-      const matchCustomer = customerMap[s.customer_id]?.toLowerCase().includes(q);
-      const matchNum = s.sale_number?.toLowerCase().includes(q) || s.id?.slice(-6).includes(q);
-      if (!matchCustomer && !matchNum) return false;
+      if (!customerMap[s.customer_id]?.toLowerCase().includes(q) && !s.sale_number?.toLowerCase().includes(q) && !s.id?.slice(-6).includes(q)) return false;
     }
     return true;
   });
@@ -142,24 +145,83 @@ export default function Historico() {
   const hasFilters = dateFrom || dateTo || filterService !== 'all' || filterPart !== 'all' || filterStatus !== 'all' || filterPayment !== 'all' || search;
 
   const totalOS = filteredOrders.reduce((s, o) => s + (o.total || 0), 0);
-  const totalPDV = filteredSales.reduce((s, sv) => s + (sv.total || 0), 0);
+  const totalPDV = filteredPdvSales.reduce((s, sv) => s + (sv.total || 0), 0);
 
-  // Export data
+  // Restore stock for a list of items [{part_id, quantity}]
+  const restoreStock = async (items) => {
+    for (const item of (items || [])) {
+      if (!item.part_id) continue;
+      const part = parts.find(p => p.id === item.part_id);
+      if (!part) continue;
+      const newStock = (part.stock_quantity || 0) + (item.quantity || 0);
+      await base44.entities.Part.update(item.part_id, { stock_quantity: newStock });
+      await base44.entities.StockMovement.create({
+        company_id: company.id, part_id: item.part_id, type: 'devolucao',
+        quantity: item.quantity, unit_cost: item.unit_price || 0,
+        reason: 'Exclusão de venda/OS via Histórico',
+        previous_stock: part.stock_quantity, new_stock: newStock,
+      });
+    }
+  };
+
+  const handleDeleteOrder = async () => {
+    const order = confirmDelete.item;
+    setDeleting(true);
+    try {
+      // Restore parts stock
+      await restoreStock(order.parts_items || []);
+      // Delete associated sale if faturada
+      if (order.sale_id) {
+        const sale = osSales.find(s => s.id === order.sale_id);
+        if (sale) {
+          await base44.entities.CreditTitle.deleteMany({ sale_id: sale.id });
+          await base44.entities.AccountingEntry.deleteMany({ reference_id: sale.id });
+          await base44.entities.Sale.delete(sale.id);
+        }
+      }
+      await base44.entities.WorkOrder.delete(order.id);
+      toast({ title: 'OS excluída e estoque restaurado!' });
+      setConfirmDelete(null);
+      loadData();
+    } catch (e) {
+      toast({ title: 'Erro ao excluir OS', description: e.message, variant: 'destructive' });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleDeleteSale = async () => {
+    const sale = confirmDelete.item;
+    setDeleting(true);
+    try {
+      // Restore parts stock
+      const partItems = (sale.items || []).filter(i => i.type === 'part' || i.part_id);
+      await restoreStock(partItems);
+      // Delete credit titles and accounting
+      await base44.entities.CreditTitle.deleteMany({ sale_id: sale.id });
+      await base44.entities.AccountingEntry.deleteMany({ reference_id: sale.id });
+      await base44.entities.Sale.delete(sale.id);
+      toast({ title: 'Venda excluída e estoque restaurado!' });
+      setConfirmDelete(null);
+      loadData();
+    } catch (e) {
+      toast({ title: 'Erro ao excluir venda', description: e.message, variant: 'destructive' });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const exportOrders = filteredOrders.map(o => ({
-    numero: o.order_number,
-    data: formatDate(o.created_date),
-    cliente: customerMap[o.customer_id] || '-',
-    status: STATUS_LABELS[o.status] || o.status,
+    numero: o.order_number, data: formatDate(o.created_date),
+    cliente: customerMap[o.customer_id] || '-', status: STATUS_LABELS[o.status] || o.status,
     total: o.total || 0,
     servicos: (o.service_items || []).map(si => si.description || serviceMap[si.service_id] || si.service_id).join('; '),
-    pecas: (o.parts_items || []).map(pi => pi.description || partMap[pi.part_id] || pi.part_id).join('; '),
+    pecas: (o.parts_items || []).map(pi => pi.description || partMap[pi.part_id]?.description || pi.part_id).join('; '),
   }));
 
-  const exportSales = filteredSales.map(s => ({
-    numero: s.sale_number || s.id.slice(-6),
-    data: formatDate(s.created_date),
+  const exportSales = filteredPdvSales.map(s => ({
+    numero: s.sale_number || s.id.slice(-6), data: formatDate(s.created_date),
     cliente: customerMap[s.customer_id] || 'Balcão',
-    tipo: s.type === 'os' ? 'OS' : 'PDV',
     pagamento: PAYMENT_LABELS[s.payment_method] || s.payment_method,
     total: s.total || 0,
     itens: (s.items || []).map(i => i.description).join('; '),
@@ -176,13 +238,11 @@ export default function Historico() {
       <Card className="mb-6">
         <CardContent className="pt-4">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            {/* Search */}
             <div className="col-span-2 relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <Input placeholder="Buscar por cliente, nº OS ou venda..." value={search}
                 onChange={e => setSearch(e.target.value)} className="pl-9" />
             </div>
-
             <div>
               <Label className="text-xs text-gray-500">De</Label>
               <Input type="date" className="mt-0.5" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
@@ -191,7 +251,6 @@ export default function Historico() {
               <Label className="text-xs text-gray-500">Até</Label>
               <Input type="date" className="mt-0.5" value={dateTo} onChange={e => setDateTo(e.target.value)} />
             </div>
-
             <div>
               <Label className="text-xs text-gray-500">Serviço</Label>
               <Select value={filterService} onValueChange={setFilterService}>
@@ -202,7 +261,6 @@ export default function Historico() {
                 </SelectContent>
               </Select>
             </div>
-
             <div>
               <Label className="text-xs text-gray-500">Peça</Label>
               <Select value={filterPart} onValueChange={setFilterPart}>
@@ -213,7 +271,6 @@ export default function Historico() {
                 </SelectContent>
               </Select>
             </div>
-
             <div>
               <Label className="text-xs text-gray-500">Status</Label>
               <Select value={filterStatus} onValueChange={setFilterStatus}>
@@ -229,7 +286,6 @@ export default function Historico() {
                 </SelectContent>
               </Select>
             </div>
-
             <div>
               <Label className="text-xs text-gray-500">Pagamento (PDV)</Label>
               <Select value={filterPayment} onValueChange={setFilterPayment}>
@@ -246,7 +302,6 @@ export default function Historico() {
               </Select>
             </div>
           </div>
-
           {hasFilters && (
             <div className="mt-3 flex items-center gap-2">
               <Filter className="w-3.5 h-3.5 text-gray-400" />
@@ -262,14 +317,12 @@ export default function Historico() {
       <Tabs defaultValue="os">
         <TabsList className="mb-4">
           <TabsTrigger value="os" className="flex items-center gap-1.5">
-            <ClipboardList className="w-3.5 h-3.5" />
-            Ordens de Serviço
+            <ClipboardList className="w-3.5 h-3.5" />Ordens de Serviço
             <Badge className="ml-1 bg-gray-200 text-gray-700 text-xs px-1.5">{filteredOrders.length}</Badge>
           </TabsTrigger>
           <TabsTrigger value="pdv" className="flex items-center gap-1.5">
-            <ShoppingCart className="w-3.5 h-3.5" />
-            Vendas PDV
-            <Badge className="ml-1 bg-gray-200 text-gray-700 text-xs px-1.5">{filteredSales.length}</Badge>
+            <ShoppingCart className="w-3.5 h-3.5" />Vendas PDV
+            <Badge className="ml-1 bg-gray-200 text-gray-700 text-xs px-1.5">{filteredPdvSales.length}</Badge>
           </TabsTrigger>
         </TabsList>
 
@@ -291,7 +344,7 @@ export default function Historico() {
               {loading ? (
                 <div className="text-center py-10 text-gray-400 text-sm">Carregando...</div>
               ) : filteredOrders.length === 0 ? (
-                <div className="text-center py-10 text-gray-400 text-sm">Nenhuma OS encontrada com os filtros aplicados.</div>
+                <div className="text-center py-10 text-gray-400 text-sm">Nenhuma OS encontrada.</div>
               ) : (
                 <div className="divide-y">
                   {filteredOrders.map(order => (
@@ -309,8 +362,6 @@ export default function Historico() {
                           <p className="text-xs text-gray-500 mt-0.5">
                             {customerMap[order.customer_id] || 'Cliente não informado'} • {formatDate(order.created_date)}
                           </p>
-
-                          {/* Services */}
                           {(order.service_items || []).length > 0 && (
                             <div className="mt-1.5 flex flex-wrap gap-1">
                               {order.service_items.map((si, i) => (
@@ -320,23 +371,33 @@ export default function Historico() {
                               ))}
                             </div>
                           )}
-
-                          {/* Parts */}
                           {(order.parts_items || []).length > 0 && (
                             <div className="mt-1 flex flex-wrap gap-1">
                               {order.parts_items.map((pi, i) => (
                                 <span key={i} className="text-xs bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">
-                                  {pi.quantity}x {pi.description || partMap[pi.part_id] || 'Peça'}
+                                  {pi.quantity}x {pi.description || partMap[pi.part_id]?.description || 'Peça'}
                                 </span>
                               ))}
                             </div>
                           )}
                         </div>
-                        <div className="text-right flex-shrink-0">
-                          <p className="font-bold text-sm">{formatCurrency(order.total || 0)}</p>
-                          <p className="text-xs text-gray-400">
-                            S: {formatCurrency(order.services_total || 0)} | P: {formatCurrency(order.parts_total || 0)}
-                          </p>
+                        <div className="flex items-start gap-2 flex-shrink-0">
+                          <div className="text-right">
+                            <p className="font-bold text-sm">{formatCurrency(order.total || 0)}</p>
+                            <p className="text-xs text-gray-400">
+                              S: {formatCurrency(order.services_total || 0)} | P: {formatCurrency(order.parts_total || 0)}
+                            </p>
+                          </div>
+                          <div className="flex gap-1 mt-0.5">
+                            <button onClick={() => navigate(`/ordens/${order.id}`)}
+                              className="p-1.5 rounded hover:bg-blue-100 text-blue-600" title="Editar OS">
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button onClick={() => setConfirmDelete({ type: 'order', item: order })}
+                              className="p-1.5 rounded hover:bg-red-100 text-red-500" title="Excluir OS">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -347,7 +408,7 @@ export default function Historico() {
           </Card>
         </TabsContent>
 
-        {/* PDV Tab */}
+        {/* PDV Tab — only pdv type sales */}
         <TabsContent value="pdv">
           <Card>
             <CardHeader className="pb-3">
@@ -364,17 +425,17 @@ export default function Historico() {
             <CardContent className="p-0">
               {loading ? (
                 <div className="text-center py-10 text-gray-400 text-sm">Carregando...</div>
-              ) : filteredSales.length === 0 ? (
-                <div className="text-center py-10 text-gray-400 text-sm">Nenhuma venda encontrada com os filtros aplicados.</div>
+              ) : filteredPdvSales.length === 0 ? (
+                <div className="text-center py-10 text-gray-400 text-sm">Nenhuma venda PDV encontrada.</div>
               ) : (
                 <div className="divide-y">
-                  {filteredSales.map(sale => (
+                  {filteredPdvSales.map(sale => (
                     <div key={sale.id} className="px-4 py-3 hover:bg-gray-50 transition-colors">
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-medium text-sm">
-                              {sale.type === 'os' ? 'OS' : 'PDV'} #{sale.sale_number || sale.id.slice(-6)}
+                              PDV #{sale.sale_number || sale.id.slice(-6)}
                             </span>
                             <Badge className={`text-xs ${STATUS_COLORS[sale.status] || 'bg-gray-100 text-gray-600'}`}>
                               {STATUS_LABELS[sale.status] || sale.status}
@@ -386,8 +447,6 @@ export default function Historico() {
                           <p className="text-xs text-gray-500 mt-0.5">
                             {customerMap[sale.customer_id] || 'Balcão'} • {formatDate(sale.created_date)}
                           </p>
-
-                          {/* Items */}
                           {(sale.items || []).length > 0 && (
                             <div className="mt-1.5 flex flex-wrap gap-1">
                               {sale.items.map((item, i) => (
@@ -398,11 +457,19 @@ export default function Historico() {
                             </div>
                           )}
                         </div>
-                        <div className="text-right flex-shrink-0">
-                          <p className="font-bold text-sm">{formatCurrency(sale.total || 0)}</p>
-                          {(sale.discount || 0) > 0 && (
-                            <p className="text-xs text-green-600">-{formatCurrency(sale.discount)}</p>
-                          )}
+                        <div className="flex items-start gap-2 flex-shrink-0">
+                          <div className="text-right">
+                            <p className="font-bold text-sm">{formatCurrency(sale.total || 0)}</p>
+                            {(sale.discount || 0) > 0 && (
+                              <p className="text-xs text-green-600">-{formatCurrency(sale.discount)}</p>
+                            )}
+                          </div>
+                          <div className="flex gap-1 mt-0.5">
+                            <button onClick={() => setConfirmDelete({ type: 'sale', item: sale })}
+                              className="p-1.5 rounded hover:bg-red-100 text-red-500" title="Excluir venda">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -413,6 +480,47 @@ export default function Historico() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Confirm delete dialog */}
+      {confirmDelete && (
+        <Dialog open onOpenChange={() => !deleting && setConfirmDelete(null)}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-red-600">
+                <AlertTriangle className="w-5 h-5" />
+                Confirmar Exclusão
+              </DialogTitle>
+            </DialogHeader>
+            <div className="py-3 space-y-3">
+              <p className="text-sm text-gray-700">
+                {confirmDelete.type === 'order'
+                  ? `Tem certeza que deseja excluir a OS #${confirmDelete.item.order_number || confirmDelete.item.id.slice(-6)}?`
+                  : `Tem certeza que deseja excluir a venda PDV #${confirmDelete.item.sale_number || confirmDelete.item.id.slice(-6)}?`}
+              </p>
+              {(confirmDelete.type === 'order'
+                ? (confirmDelete.item.parts_items || []).length > 0
+                : (confirmDelete.item.items || []).some(i => i.part_id)
+              ) && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
+                  <strong>⚠️ As peças usadas serão devolvidas ao estoque automaticamente.</strong>
+                </div>
+              )}
+              <div className="flex gap-3 pt-1">
+                <Button variant="outline" onClick={() => setConfirmDelete(null)} className="flex-1" disabled={deleting}>
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={confirmDelete.type === 'order' ? handleDeleteOrder : handleDeleteSale}
+                  disabled={deleting}
+                  className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+                >
+                  {deleting ? 'Excluindo...' : 'Excluir'}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

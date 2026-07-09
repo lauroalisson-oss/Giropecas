@@ -1,0 +1,47 @@
+{
+  "type": "object",
+  "properties": {
+    "key": {
+      "type": "string",
+      "description": "Chave de acesso no formato GIRO-XXXX-XXXX-XXXX"
+    },
+    "duration_days": {
+      "type": "number",
+      "description": "Validade da chave em dias (3, 5, 15, 30, 90, 180 ou 365)"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "available",
+        "active",
+        "expired",
+        "revoked"
+      ],
+      "default": "available"
+    },
+    "activated_by": {
+      "type": "string",
+      "description": "Email do usuário que ativou a chave"
+    },
+    "activated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "company_id": {
+      "type": "string",
+      "description": "Empresa vinculada à chave após a ativação"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "key",
+    "duration_days"
+  ],
+  "name": "AccessKey"
+}

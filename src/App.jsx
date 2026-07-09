@@ -9,6 +9,8 @@ import ScrollToTop from './components/ScrollToTop';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import { CompanyProvider } from '@/lib/CompanyContext';
+import { LicenseProvider } from '@/lib/LicenseContext';
+import LicenseGate from '@/components/LicenseGate';
 
 // Pages
 import Dashboard from '@/pages/Dashboard';
@@ -32,6 +34,7 @@ import Relatorios from '@/pages/Relatorios';
 import Historico from '@/pages/Historico';
 import Configuracoes from '@/pages/Configuracoes';
 import Tecnicos from '@/pages/Tecnicos';
+import AdminChaves from '@/pages/AdminChaves';
 import Login from '@/pages/Login';
 import Register from '@/pages/Register';
 import ForgotPassword from '@/pages/ForgotPassword';
@@ -63,7 +66,13 @@ const AuthenticatedApp = () => {
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />}>
-        <Route element={<CompanyProvider><Layout /></CompanyProvider>}>
+        <Route element={
+          <LicenseProvider>
+            <LicenseGate>
+              <CompanyProvider><Layout /></CompanyProvider>
+            </LicenseGate>
+          </LicenseProvider>
+        }>
           <Route path="/" element={<Dashboard />} />
           <Route path="/clientes" element={<Clientes />} />
           <Route path="/clientes/novo" element={<ClienteForm />} />
@@ -88,6 +97,7 @@ const AuthenticatedApp = () => {
           <Route path="/historico" element={<Historico />} />
           <Route path="/tecnicos" element={<Tecnicos />} />
           <Route path="/configuracoes" element={<Configuracoes />} />
+          <Route path="/admin/chaves" element={<AdminChaves />} />
         </Route>
       </Route>
       <Route path="*" element={<PageNotFound />} />

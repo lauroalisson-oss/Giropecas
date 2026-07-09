@@ -29,27 +29,40 @@ function extractFeeFromSale(sale) {
   return 0;
 }
 
-// Compute cost of goods sold from items (parts have cost_price)
-function extractCOGS(sale, partMap) {
+// COGS from a Sale record (PDV: items array; OS: look up work order parts_items)
+function extractCOGSFromSale(sale, partMap, orderMap) {
   let cogs = 0;
-  for (const item of sale.items || []) {
-    if (item.type === 'part') {
-      const part = partMap[item.part_id || item.id];
-      const costPrice = part?.cost_price || item.cost_price || 0;
+  if (sale.type === 'pdv') {
+    for (const item of sale.items || []) {
+      if (item.type === 'part' || item.part_id) {
+        const part = partMap[item.part_id || item.id];
+        const costPrice = part?.cost_price ?? item.cost_price ?? 0;
+        cogs += costPrice * (item.quantity || 1);
+      }
+    }
+  } else if (sale.type === 'os' && sale.work_order_id) {
+    const order = orderMap[sale.work_order_id];
+    for (const item of order?.parts_items || []) {
+      const part = partMap[item.part_id];
+      const costPrice = part?.cost_price ?? item.cost_price ?? 0;
       cogs += costPrice * (item.quantity || 1);
     }
   }
   return cogs;
 }
 
-// Compute service commissions from work-order service items
-function extractServiceCommissions(order, serviceMap, commissionRate) {
+// Commissions based on service revenue in a Sale (OS type) or via work order
+function extractCommissionsFromSale(sale, orderMap, commissionRate) {
   if (!commissionRate) return 0;
-  let base = 0;
-  for (const si of order.service_items || []) {
-    base += si.total_price || (si.unit_price || 0) * (si.hours || 1);
+  let serviceRevenue = 0;
+  if (sale.type === 'os' && sale.work_order_id) {
+    const order = orderMap[sale.work_order_id];
+    for (const si of order?.service_items || []) {
+      serviceRevenue += si.total_price || (si.unit_price || 0) * (si.hours || 1);
+    }
   }
-  return base * (commissionRate / 100);
+  // For PDV, no service commission (parts only)
+  return serviceRevenue * (commissionRate / 100);
 }
 
 export default function FinancialPanel() {
@@ -95,16 +108,14 @@ export default function FinancialPanel() {
     ]);
 
     const partMap = Object.fromEntries(parts.map(p => [p.id, p]));
+    const orderMap = Object.fromEntries(orders.map(o => [o.id, o]));
 
     // Today
     const todaySales = sales.filter(s => s.created_date?.startsWith(today) && s.status === 'pago');
     const todayRevenue = todaySales.reduce((s, x) => s + (x.total || 0), 0);
     const todayFees = todaySales.reduce((s, x) => s + extractFeeFromSale(x), 0);
-    const todayCOGS = todaySales.reduce((s, x) => s + extractCOGS(x, partMap), 0);
-
-    // Today commissions from faturada/finalizada orders
-    const todayOrders = orders.filter(o => o.created_date?.startsWith(today));
-    const todayCommissions = todayOrders.reduce((s, o) => s + extractServiceCommissions(o, {}, cRate), 0);
+    const todayCOGS = todaySales.reduce((s, x) => s + extractCOGSFromSale(x, partMap, orderMap), 0);
+    const todayCommissions = todaySales.reduce((s, x) => s + extractCommissionsFromSale(x, orderMap, cRate), 0);
 
     const todayNetProfit = todayRevenue - todayFees - todayCOGS - todayCommissions;
 
@@ -128,9 +139,8 @@ export default function FinancialPanel() {
       const daySales = sales.filter(s => s.created_date?.startsWith(dateStr) && s.status === 'pago');
       const revenue = daySales.reduce((s, x) => s + (x.total || 0), 0);
       const fees = daySales.reduce((s, x) => s + extractFeeFromSale(x), 0);
-      const cogs = daySales.reduce((s, x) => s + extractCOGS(x, partMap), 0);
-      const dayOrders = orders.filter(o => o.created_date?.startsWith(dateStr));
-      const commissions = dayOrders.reduce((s, o) => s + extractServiceCommissions(o, {}, cRate), 0);
+      const cogs = daySales.reduce((s, x) => s + extractCOGSFromSale(x, partMap, orderMap), 0);
+      const commissions = daySales.reduce((s, x) => s + extractCommissionsFromSale(x, orderMap, cRate), 0);
       const netProfit = revenue - fees - cogs - commissions;
       return {
         day: d.toLocaleDateString('pt-BR', { weekday: 'short' }),

@@ -130,6 +130,13 @@ export default function PDV() {
   const handleCheckout = async () => {
     if (cart.length === 0) { toast({ title: 'Carrinho vazio', variant: 'destructive' }); return; }
     if (hasCrediario && !selectedCustomer) { toast({ title: 'Selecione o cliente para crediário', variant: 'destructive' }); return; }
+    if (hasCrediario && selectedCustomer) {
+      const cust = customers.find(c => c.id === selectedCustomer);
+      if (!cust?.tax_id || !cust?.name || !cust?.phone) {
+        toast({ title: 'Cadastro incompleto para crediário', description: 'O cliente precisa ter CPF, Nome completo e Telefone cadastrados.', variant: 'destructive' });
+        return;
+      }
+    }
     if (Math.abs(totalPaid - total) > 0.01 && !hasCrediario) {
       toast({ title: 'Valor pago não confere com o total', description: `Total: ${formatCurrency(total)} | Pago: ${formatCurrency(totalPaid)}`, variant: 'destructive' });
       return;
@@ -318,14 +325,25 @@ export default function PDV() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <Label className="text-xs">Cliente (opcional)</Label>
+                <Label className="text-xs">{hasCrediario ? 'Cliente (obrigatório para crediário)' : 'Cliente (opcional)'}</Label>
                 <Select value={selectedCustomer || 'none'} onValueChange={v => setSelectedCustomer(v === 'none' ? '' : v)}>
-                  <SelectTrigger className="mt-1"><SelectValue placeholder="Sem cliente" /></SelectTrigger>
+                  <SelectTrigger className={`mt-1 ${hasCrediario ? 'border-yellow-400' : ''}`}><SelectValue placeholder="Sem cliente" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">Sem cliente</SelectItem>
-                    {customers.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                    {customers.map(c => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name}{(!c.tax_id || !c.phone) ? ' ⚠️' : ''}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
+                {hasCrediario && selectedCustomer && (() => {
+                  const cust = customers.find(c => c.id === selectedCustomer);
+                  const missing = [!cust?.tax_id && 'CPF', !cust?.phone && 'Telefone'].filter(Boolean);
+                  return missing.length > 0 ? (
+                    <p className="text-xs text-red-500 mt-1">⚠️ Faltam: {missing.join(', ')} no cadastro</p>
+                  ) : null;
+                })()}
               </div>
 
               <div>

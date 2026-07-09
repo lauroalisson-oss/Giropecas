@@ -33,6 +33,12 @@ export default function PagamentoModal({ order, customer, onClose, onSuccess }) 
   const installmentAmount = installments > 0 ? (remainingForCredit * (1 + interestRate / 100)) / installments : 0;
 
   const handleConfirm = async () => {
+    if (method === 'crediario') {
+      if (!customer?.tax_id || !customer?.name || !customer?.phone) {
+        toast({ title: 'Cadastro incompleto para crediário', description: 'O cliente precisa ter CPF, Nome completo e Telefone cadastrados antes de vender no crediário.', variant: 'destructive' });
+        return;
+      }
+    }
     setSaving(true);
     try {
       // Create sale

@@ -10,9 +10,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Search, Download, ClipboardList, ShoppingCart, Filter, X, Trash2, Edit2, AlertTriangle } from 'lucide-react';
+import { Search, Download, ClipboardList, ShoppingCart, Filter, X, Trash2, Edit2, AlertTriangle, Printer, FileText, Receipt } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useToast } from '@/components/ui/use-toast';
+import { printDocument } from '@/components/PrintReceipt';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
 const STATUS_COLORS = {
   aberta: 'bg-blue-100 text-blue-700',
@@ -55,6 +57,7 @@ export default function Historico() {
   const [customers, setCustomers] = useState([]);
   const [services, setServices] = useState([]);
   const [parts, setParts] = useState([]);
+  const [technicians, setTechnicians] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // Filters
@@ -76,24 +79,27 @@ export default function Historico() {
 
   const loadData = async () => {
     setLoading(true);
-    const [ord, sal, custs, svcs, pts] = await Promise.all([
+    const [ord, sal, custs, svcs, pts, techs] = await Promise.all([
       base44.entities.WorkOrder.filter({ company_id: company.id }, '-created_date', 200),
       base44.entities.Sale.filter({ company_id: company.id }, '-created_date', 200),
       base44.entities.Customer.filter({ company_id: company.id }),
       base44.entities.Service.filter({ company_id: company.id }),
       base44.entities.Part.filter({ company_id: company.id }),
+      base44.entities.Technician.filter({ company_id: company.id }),
     ]);
     setOrders(ord);
     setSales(sal);
     setCustomers(custs);
     setServices(svcs);
     setParts(pts);
+    setTechnicians(techs);
     setLoading(false);
   };
 
-  const customerMap = Object.fromEntries(customers.map(c => [c.id, c.name]));
+  const customerMap = Object.fromEntries(customers.map(c => [c.id, c]));
   const serviceMap = Object.fromEntries(services.map(s => [s.id, s.name]));
   const partMap = Object.fromEntries(parts.map(p => [p.id, { description: p.description, stock: p.stock_quantity }]));
+  const technicianMap = Object.fromEntries(technicians.map(t => [t.id, t]));
 
   const inDateRange = (dateStr) => {
     if (!dateStr) return true;
@@ -118,7 +124,7 @@ export default function Historico() {
     }
     if (search) {
       const s = search.toLowerCase();
-      if (!customerMap[o.customer_id]?.toLowerCase().includes(s) && !o.order_number?.toLowerCase().includes(s)) return false;
+      if (!customerMap[o.customer_id]?.name?.toLowerCase().includes(s) && !o.order_number?.toLowerCase().includes(s)) return false;
     }
     return true;
   });
@@ -132,7 +138,7 @@ export default function Historico() {
     }
     if (search) {
       const q = search.toLowerCase();
-      if (!customerMap[s.customer_id]?.toLowerCase().includes(q) && !s.sale_number?.toLowerCase().includes(q) && !s.id?.slice(-6).includes(q)) return false;
+      if (!customerMap[s.customer_id]?.name?.toLowerCase().includes(q) && !s.sale_number?.toLowerCase().includes(q) && !s.id?.slice(-6).includes(q)) return false;
     }
     return true;
   });
@@ -213,7 +219,7 @@ export default function Historico() {
 
   const exportOrders = filteredOrders.map(o => ({
     numero: o.order_number, data: formatDate(o.created_date),
-    cliente: customerMap[o.customer_id] || '-', status: STATUS_LABELS[o.status] || o.status,
+    cliente: customerMap[o.customer_id]?.name || '-', status: STATUS_LABELS[o.status] || o.status,
     total: o.total || 0,
     servicos: (o.service_items || []).map(si => si.description || serviceMap[si.service_id] || si.service_id).join('; '),
     pecas: (o.parts_items || []).map(pi => pi.description || partMap[pi.part_id]?.description || pi.part_id).join('; '),
@@ -221,7 +227,7 @@ export default function Historico() {
 
   const exportSales = filteredPdvSales.map(s => ({
     numero: s.sale_number || s.id.slice(-6), data: formatDate(s.created_date),
-    cliente: customerMap[s.customer_id] || 'Balcão',
+    cliente: customerMap[s.customer_id]?.name || 'Balcão',
     pagamento: PAYMENT_LABELS[s.payment_method] || s.payment_method,
     total: s.total || 0,
     itens: (s.items || []).map(i => i.description).join('; '),
@@ -360,7 +366,7 @@ export default function Historico() {
                             </Badge>
                           </div>
                           <p className="text-xs text-gray-500 mt-0.5">
-                            {customerMap[order.customer_id] || 'Cliente não informado'} • {formatDate(order.created_date)}
+                            {customerMap[order.customer_id]?.name || 'Cliente não informado'} • {formatDate(order.created_date)}
                           </p>
                           {(order.service_items || []).length > 0 && (
                             <div className="mt-1.5 flex flex-wrap gap-1">
@@ -393,6 +399,21 @@ export default function Historico() {
                               className="p-1.5 rounded hover:bg-blue-100 text-blue-600" title="Editar OS">
                               <Edit2 className="w-3.5 h-3.5" />
                             </button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <button className="p-1.5 rounded hover:bg-gray-100 text-gray-500" title="Imprimir">
+                                  <Printer className="w-3.5 h-3.5" />
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => printDocument({ type: 'os', doc: order, company, customer: customerMap[order.customer_id] || null, technician: technicianMap[order.mechanic_id] || null, format: 'a4' })}>
+                                  <FileText className="w-3.5 h-3.5 mr-2" />Folha A4
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => printDocument({ type: 'os', doc: order, company, customer: customerMap[order.customer_id] || null, technician: technicianMap[order.mechanic_id] || null, format: 'cupom' })}>
+                                  <Receipt className="w-3.5 h-3.5 mr-2" />Cupom 80mm
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                             <button onClick={() => setConfirmDelete({ type: 'order', item: order })}
                               className="p-1.5 rounded hover:bg-red-100 text-red-500" title="Excluir OS">
                               <Trash2 className="w-3.5 h-3.5" />
@@ -445,7 +466,7 @@ export default function Historico() {
                             </span>
                           </div>
                           <p className="text-xs text-gray-500 mt-0.5">
-                            {customerMap[sale.customer_id] || 'Balcão'} • {formatDate(sale.created_date)}
+                            {customerMap[sale.customer_id]?.name || 'Balcão'} • {formatDate(sale.created_date)}
                           </p>
                           {(sale.items || []).length > 0 && (
                             <div className="mt-1.5 flex flex-wrap gap-1">
@@ -465,6 +486,21 @@ export default function Historico() {
                             )}
                           </div>
                           <div className="flex gap-1 mt-0.5">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <button className="p-1.5 rounded hover:bg-gray-100 text-gray-500" title="Imprimir">
+                                  <Printer className="w-3.5 h-3.5" />
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => printDocument({ type: 'pdv', doc: sale, company, customer: customerMap[sale.customer_id] || null, format: 'a4' })}>
+                                  <FileText className="w-3.5 h-3.5 mr-2" />Folha A4
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => printDocument({ type: 'pdv', doc: sale, company, customer: customerMap[sale.customer_id] || null, format: 'cupom' })}>
+                                  <Receipt className="w-3.5 h-3.5 mr-2" />Cupom 80mm
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                             <button onClick={() => setConfirmDelete({ type: 'sale', item: sale })}
                               className="p-1.5 rounded hover:bg-red-100 text-red-500" title="Excluir venda">
                               <Trash2 className="w-3.5 h-3.5" />

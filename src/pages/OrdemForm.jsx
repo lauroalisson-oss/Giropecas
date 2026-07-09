@@ -54,14 +54,16 @@ export default function OrdemForm() {
   }, [form.customer_id]);
 
   const loadData = async () => {
-    const [custs, pts, svcs] = await Promise.all([
+    const [custs, pts, svcs, techs] = await Promise.all([
       base44.entities.Customer.filter({ company_id: company.id, is_active: true }),
       base44.entities.Part.filter({ company_id: company.id, is_active: true }),
       base44.entities.Service.filter({ company_id: company.id, is_active: true }),
+      base44.entities.Technician.filter({ company_id: company.id, is_active: true }, 'name'),
     ]);
     setCustomers(custs);
     setParts(pts);
     setServices(svcs);
+    setMechanics(techs);
   };
 
   const loadVehicles = async (customerId) => {
@@ -189,9 +191,21 @@ export default function OrdemForm() {
                 </Select>
               </div>
             )}
-            <div>
-              <Label>KM atual</Label>
-              <Input className="mt-1" type="number" value={form.vehicle_km} onChange={e => set('vehicle_km', e.target.value)} placeholder="15000" />
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>KM atual</Label>
+                <Input className="mt-1" type="number" value={form.vehicle_km} onChange={e => set('vehicle_km', e.target.value)} placeholder="15000" />
+              </div>
+              <div>
+                <Label>Técnico Responsável</Label>
+                <Select value={form.mechanic_id} onValueChange={v => set('mechanic_id', v)}>
+                  <SelectTrigger className="mt-1"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">— Nenhum —</SelectItem>
+                    {mechanics.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </CardContent>
         </Card>

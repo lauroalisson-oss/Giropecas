@@ -10,10 +10,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, Printer, CreditCard, Package, Wrench, User, Car, Edit, Save, X, Plus, Trash2, Search } from 'lucide-react';
+import { ArrowLeft, Printer, CreditCard, Package, Wrench, User, Car, Edit, Save, X, Plus, Trash2, Search, HardHat, FileText, Receipt } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import PagamentoModal from '@/components/PagamentoModal';
-import { printOrdem } from '@/components/OrdemPrint';
+import { printDocument } from '@/components/PrintReceipt';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
 const STATUS_FLOW = ['aberta', 'em_andamento', 'aguardando_peca', 'finalizada'];
 
@@ -26,6 +27,8 @@ export default function OrdemDetalhe() {
   const [order, setOrder] = useState(null);
   const [customer, setCustomer] = useState(null);
   const [vehicle, setVehicle] = useState(null);
+  const [technician, setTechnician] = useState(null);
+  const [allTechnicians, setAllTechnicians] = useState([]);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
@@ -54,6 +57,14 @@ export default function OrdemDetalhe() {
         const veh = await base44.entities.Vehicle.get(ord.vehicle_id);
         setVehicle(veh);
       }
+      if (ord.mechanic_id) {
+        const tech = await base44.entities.Technician.get(ord.mechanic_id);
+        setTechnician(tech);
+      } else {
+        setTechnician(null);
+      }
+      const techs = await base44.entities.Technician.filter({ company_id: ord.company_id, is_active: true }, 'name');
+      setAllTechnicians(techs);
     } finally {
       setLoading(false);
     }
@@ -73,6 +84,7 @@ export default function OrdemDetalhe() {
       diagnosis: order.diagnosis || '',
       notes: order.notes || '',
       vehicle_km: order.vehicle_km || '',
+      mechanic_id: order.mechanic_id || '',
       discount: order.discount || 0,
       parts_items: order.parts_items ? JSON.parse(JSON.stringify(order.parts_items)) : [],
       service_items: order.service_items ? JSON.parse(JSON.stringify(order.service_items)) : [],
@@ -135,8 +147,10 @@ export default function OrdemDetalhe() {
   const handleSave = async () => {
     setSaving(true);
     try {
+      const mechId = editForm.mechanic_id && editForm.mechanic_id !== 'none' ? editForm.mechanic_id : null;
       const payload = {
         ...editForm,
+        mechanic_id: mechId,
         parts_total: partsTotal,
         services_total: servicesTotal,
         total: editTotal,
@@ -167,8 +181,8 @@ export default function OrdemDetalhe() {
     await updateStatus('cancelada');
   };
 
-  const handlePrint = () => {
-    printOrdem({ order, customer, vehicle, company });
+  const handlePrint = (format) => {
+    printDocument({ type: 'os', doc: { ...order, vehicle }, company, customer, technician, format });
   };
 
   if (loading) return <div className="flex justify-center py-20 text-gray-400">Carregando...</div>;
@@ -204,9 +218,15 @@ export default function OrdemDetalhe() {
               <Edit className="w-4 h-4 mr-1" />Editar
             </Button>
           )}
-          <Button variant="outline" size="sm" onClick={handlePrint}>
-            <Printer className="w-4 h-4 mr-1" />Imprimir
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm"><Printer className="w-4 h-4 mr-1" />Imprimir</Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => handlePrint('a4')}><FileText className="w-4 h-4 mr-2" />Folha A4</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handlePrint('cupom')}><Receipt className="w-4 h-4 mr-2" />Cupom 80mm</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
@@ -278,6 +298,18 @@ export default function OrdemDetalhe() {
         </Card>
       </div>
 
+      {/* Technician card (view mode) */}
+      {technician && !editing && (
+        <Card className="mb-4">
+          <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><HardHat className="w-4 h-4 text-red-600" />Técnico Responsável</CardTitle></CardHeader>
+          <CardContent className="p-4 pt-2">
+            <p className="font-medium text-gray-900">{technician.name}</p>
+            {technician.specialty && <p className="text-sm text-gray-500">{technician.specialty}</p>}
+            {technician.phone && <p className="text-sm text-gray-400">{technician.phone}</p>}
+          </CardContent>
+        </Card>
+      )}
+
       {/* EDIT MODE */}
       {editing ? (
         <div className="space-y-4">
@@ -285,9 +317,21 @@ export default function OrdemDetalhe() {
           <Card>
             <CardHeader className="pb-3"><CardTitle className="text-sm">Reclamação & Diagnóstico</CardTitle></CardHeader>
             <CardContent className="space-y-3">
-              <div>
-                <Label className="text-xs">KM atual do veículo</Label>
-                <Input className="mt-1" type="number" value={editForm.vehicle_km} onChange={e => setField('vehicle_km', e.target.value)} placeholder="15000" />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs">KM atual do veículo</Label>
+                  <Input className="mt-1" type="number" value={editForm.vehicle_km} onChange={e => setField('vehicle_km', e.target.value)} placeholder="15000" />
+                </div>
+                <div>
+                  <Label className="text-xs">Técnico Responsável</Label>
+                  <Select value={editForm.mechanic_id || 'none'} onValueChange={v => setField('mechanic_id', v === 'none' ? '' : v)}>
+                    <SelectTrigger className="mt-1 h-9"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">— Nenhum —</SelectItem>
+                      {allTechnicians.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               <div>
                 <Label className="text-xs">Reclamação do cliente</Label>

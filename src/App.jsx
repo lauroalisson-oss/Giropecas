@@ -31,6 +31,7 @@ import NFe from '@/pages/NFe';
 import Relatorios from '@/pages/Relatorios';
 import Historico from '@/pages/Historico';
 import Configuracoes from '@/pages/Configuracoes';
+import Tecnicos from '@/pages/Tecnicos';
 import Login from '@/pages/Login';
 import Register from '@/pages/Register';
 import ForgotPassword from '@/pages/ForgotPassword';
@@ -85,6 +86,7 @@ const AuthenticatedApp = () => {
           <Route path="/nfe" element={<NFe />} />
           <Route path="/relatorios" element={<Relatorios />} />
           <Route path="/historico" element={<Historico />} />
+          <Route path="/tecnicos" element={<Tecnicos />} />
           <Route path="/configuracoes" element={<Configuracoes />} />
         </Route>
       </Route>

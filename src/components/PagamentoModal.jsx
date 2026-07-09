@@ -58,6 +58,8 @@ export default function PagamentoModal({ order, customer, onClose, onSuccess }) 
 
   const totalPaid = payments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
   const totalFees = payments.reduce((s, p) => getCardFee(p), 0);
+  const hasCash = payments.some(p => p.method === 'dinheiro');
+  const change = hasCash ? Math.max(0, totalPaid - total) : 0;
   const remainingForCredit = total - (parseFloat(downPayment) || 0);
   const installmentAmount = installments > 0 ? (remainingForCredit * (1 + interestRate / 100)) / installments : 0;
 
@@ -83,10 +85,13 @@ export default function PagamentoModal({ order, customer, onClose, onSuccess }) 
         return;
       }
     }
-    // Amount validation (skip for crediário only payment)
-    if (!hasCrediario && Math.abs(totalPaid - total) > 0.01) {
-      toast({ title: 'Valor não confere', description: `Total: ${formatCurrency(total)} | Pago: ${formatCurrency(totalPaid)}`, variant: 'destructive' });
-      return;
+    // Amount validation — cash payments can exceed total (change); non-cash must match exactly
+    if (!hasCrediario) {
+      const isValid = hasCash ? totalPaid >= total - 0.01 : Math.abs(totalPaid - total) <= 0.01;
+      if (!isValid) {
+        toast({ title: 'Valor não confere', description: `Total: ${formatCurrency(total)} | Pago: ${formatCurrency(totalPaid)}`, variant: 'destructive' });
+        return;
+      }
     }
 
     setSaving(true);
@@ -226,7 +231,7 @@ export default function PagamentoModal({ order, customer, onClose, onSuccess }) 
                   </div>
 
                   <div>
-                    <Label className="text-xs">Valor (R$)</Label>
+                    <Label className="text-xs">{pay.method === 'dinheiro' ? 'Valor recebido (R$)' : 'Valor (R$)'}</Label>
                     <Input className="mt-0.5 h-8" type="number" min="0" step="0.01"
                       value={pay.amount} onChange={e => updatePayment(idx, 'amount', parseFloat(e.target.value) || 0)} />
                   </div>
@@ -327,8 +332,8 @@ export default function PagamentoModal({ order, customer, onClose, onSuccess }) 
               <span>Total OS</span><span className="text-red-600">{formatCurrency(total)}</span>
             </div>
             {payments.length > 1 && (
-              <div className={`flex justify-between text-xs ${Math.abs(totalPaid - total) < 0.01 ? 'text-green-600' : 'text-red-500'}`}>
-                <span>Total pago</span><span>{formatCurrency(totalPaid)}</span>
+              <div className={`flex justify-between text-xs ${Math.abs(totalPaid - total) < 0.01 || (hasCash && totalPaid >= total) ? 'text-green-600' : 'text-red-500'}`}>
+                <span>Total recebido</span><span>{formatCurrency(totalPaid)}</span>
               </div>
             )}
             {totalFees > 0 && (
@@ -339,6 +344,11 @@ export default function PagamentoModal({ order, customer, onClose, onSuccess }) 
             {totalFees > 0 && (
               <div className="flex justify-between text-xs font-medium text-gray-700">
                 <span>Líquido recebido</span><span>{formatCurrency(total - totalFees)}</span>
+              </div>
+            )}
+            {hasCash && change > 0.01 && (
+              <div className="flex justify-between font-bold text-green-700 bg-green-50 rounded-lg px-3 py-2 mt-1">
+                <span>💵 Troco</span><span>{formatCurrency(change)}</span>
               </div>
             )}
           </div>

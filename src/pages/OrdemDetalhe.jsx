@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ArrowLeft, Printer, CreditCard, Package, Wrench, User, Car, Edit, Save, X, Plus, Trash2, Search } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import PagamentoModal from '@/components/PagamentoModal';
@@ -214,17 +215,23 @@ export default function OrdemDetalhe() {
         <Card className="mb-4 border-blue-200 bg-blue-50">
           <CardContent className="p-4">
             <div className="flex items-center justify-between flex-wrap gap-3">
-              <div>
-                <p className="text-sm font-medium text-blue-800">Status atual</p>
-                <p className="text-xs text-blue-600">{getStatusLabel(order.status)}</p>
+              <div className="flex items-center gap-3">
+                <div>
+                  <p className="text-sm font-medium text-blue-800">Status atual</p>
+                </div>
+                <Select value={order.status} onValueChange={updateStatus} disabled={updating}>
+                  <SelectTrigger className="h-8 text-xs bg-white border-blue-300 w-44">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="aberta">Aberta</SelectItem>
+                    <SelectItem value="em_andamento">Em Andamento</SelectItem>
+                    <SelectItem value="aguardando_peca">Aguardando Peça</SelectItem>
+                    <SelectItem value="finalizada">Finalizada</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div className="flex gap-2 flex-wrap">
-                {canAdvance && (
-                  <Button size="sm" onClick={() => updateStatus(nextStatus)} disabled={updating}
-                    className="bg-blue-600 hover:bg-blue-700 text-white">
-                    → {getStatusLabel(nextStatus)}
-                  </Button>
-                )}
                 {/* Payment available in any active status */}
                 <Button size="sm" onClick={() => setShowPayment(true)}
                   className="bg-green-600 hover:bg-green-700 text-white">

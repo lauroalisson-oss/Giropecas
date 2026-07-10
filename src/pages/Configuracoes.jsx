@@ -191,11 +191,11 @@ export default function Configuracoes() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label>CNPJ</Label>
-                    <Input className="mt-1" value={form.cnpj || ''} onChange={e => set('cnpj', e.target.value)} placeholder="00.000.000/0000-00" />
+                    <Input className="mt-1" value={form.cnpj || ''} onChange={e => set('cnpj', e.target.value)} placeholder="00.000.000/0000-00" maxLength={18} />
                   </div>
                   <div>
                     <Label>Telefone</Label>
-                    <Input className="mt-1" value={form.phone || ''} onChange={e => set('phone', e.target.value)} />
+                    <Input className="mt-1" value={form.phone || ''} onChange={e => set('phone', e.target.value)} placeholder="(00) 00000-0000" maxLength={15} />
                   </div>
                 </div>
                 <div>
@@ -218,7 +218,7 @@ export default function Configuracoes() {
                 </div>
                 <div>
                   <Label>CEP</Label>
-                  <Input className="mt-1" value={form.zip_code || ''} onChange={e => set('zip_code', e.target.value)} placeholder="00000-000" />
+                  <Input className="mt-1" value={form.zip_code || ''} onChange={e => set('zip_code', e.target.value)} placeholder="00000-000" maxLength={9} />
                 </div>
               </CardContent>
             </Card>

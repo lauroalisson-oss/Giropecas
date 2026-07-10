@@ -1,16 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useCompany } from '@/lib/CompanyContext';
-import { formatCurrency, formatDate, formatDateTime, getStatusColor, getStatusLabel } from '@/lib/formatters';
+import { formatCurrency, formatDateTime } from '@/lib/formatters';
+import { consultarNota, NFE_STATUS_LABEL, NFE_STATUS_COLOR } from '@/lib/fiscal';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { FileText, AlertCircle, CheckCircle, Clock, Info } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
+import { FileText, AlertCircle, CheckCircle, Clock, Info, RefreshCw } from 'lucide-react';
+import { useToast } from '@/components/ui/use-toast';
 
 export default function NFe() {
   const { company } = useCompany();
+  const { toast } = useToast();
   const [nfes, setNfes] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [checking, setChecking] = useState(null);
 
   useEffect(() => { if (company?.id) loadNFes(); }, [company]);
 
@@ -21,25 +25,21 @@ export default function NFe() {
     setLoading(false);
   };
 
-  const nfeStatusColor = (status) => {
-    const map = {
-      rascunho: 'bg-gray-100 text-gray-700',
-      validando: 'bg-blue-100 text-blue-700',
-      enviada: 'bg-yellow-100 text-yellow-700',
-      autorizada: 'bg-green-100 text-green-700',
-      rejeitada: 'bg-red-100 text-red-700',
-      cancelada: 'bg-gray-100 text-gray-500',
-    };
-    return map[status] || 'bg-gray-100 text-gray-700';
+  const handleCheck = async (nfeId) => {
+    setChecking(nfeId);
+    try {
+      const result = await consultarNota(nfeId);
+      toast({ title: `Status: ${NFE_STATUS_LABEL[result.status] || result.status}` });
+      loadNFes();
+    } catch (e) {
+      toast({ title: 'Erro ao consultar', description: e.message, variant: 'destructive' });
+    } finally {
+      setChecking(null);
+    }
   };
 
-  const nfeStatusLabel = (status) => {
-    const map = {
-      rascunho: 'Rascunho', validando: 'Validando', enviada: 'Enviada',
-      autorizada: 'Autorizada', rejeitada: 'Rejeitada', cancelada: 'Cancelada',
-    };
-    return map[status] || status;
-  };
+  const nfeStatusColor = (status) => NFE_STATUS_COLOR[status] || 'bg-gray-100 text-gray-700';
+  const nfeStatusLabel = (status) => NFE_STATUS_LABEL[status] || status;
 
   return (
     <div className="p-4 lg:p-6 pb-20 lg:pb-6">
@@ -55,18 +55,12 @@ export default function NFe() {
             <div className="flex items-start gap-3">
               <Info className="w-5 h-5 text-yellow-600 mt-0.5 flex-shrink-0" />
               <div>
-                <p className="font-semibold text-yellow-800">Módulo NF-e — Aguardando Ativação</p>
+                <p className="font-semibold text-yellow-800">Módulo Fiscal desativado</p>
                 <p className="text-sm text-yellow-700 mt-1">
-                  O módulo de emissão de NF-e está estruturado e pronto para integração com o provedor SEFAZ.
-                  Para ativar, configure o certificado digital e a URL do provedor nas
-                  <strong> Configurações da Empresa</strong>.
+                  Para emitir NFC-e (balcão) e NF-e, ative o módulo em
+                  <strong> Configurações → Fiscal &amp; NF-e</strong> e conclua a configuração do provedor fiscal.
+                  O passo a passo completo está em <code>docs/NOTA-FISCAL.md</code>.
                 </p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <Badge className="bg-green-100 text-green-700">✓ Estrutura de dados pronta</Badge>
-                  <Badge className="bg-green-100 text-green-700">✓ Campos NCM/CFOP configurados</Badge>
-                  <Badge className="bg-yellow-100 text-yellow-700">⏳ Integração SEFAZ — Sprint 2</Badge>
-                  <Badge className="bg-yellow-100 text-yellow-700">⏳ Certificado digital — Sprint 2</Badge>
-                </div>
               </div>
             </div>
           </CardContent>
@@ -118,9 +112,16 @@ export default function NFe() {
                   </div>
                   <div className="text-right flex-shrink-0">
                     <p className="font-bold text-gray-900">{formatCurrency(nfe.total_amount)}</p>
-                    <div className="flex gap-2 mt-1">
+                    <div className="flex gap-2 mt-1 items-center justify-end">
                       {nfe.danfe_url && <a href={nfe.danfe_url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline">DANFE</a>}
                       {nfe.xml_url && <a href={nfe.xml_url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline">XML</a>}
+                      {['enviada', 'validando'].includes(nfe.status) && (
+                        <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" disabled={checking === nfe.id}
+                          onClick={() => handleCheck(nfe.id)}>
+                          <RefreshCw className={`w-3 h-3 mr-1 ${checking === nfe.id ? 'animate-spin' : ''}`} />
+                          Consultar
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </CardContent>

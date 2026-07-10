@@ -161,24 +161,55 @@ export default function Configuracoes() {
                   </Select>
                 </div>
 
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Inscrição Estadual (IE)</Label>
+                    <Input className="mt-1" value={form.ie || ''} onChange={e => set('ie', e.target.value)} placeholder="Isento ou nº da IE" />
+                  </div>
+                  <div>
+                    <Label>Inscrição Municipal (IM)</Label>
+                    <Input className="mt-1" value={form.im || ''} onChange={e => set('im', e.target.value)} placeholder="opcional" />
+                  </div>
+                </div>
+
                 <div className="flex items-center gap-3 py-2">
                   <Switch checked={form.nfe_enabled || false} onCheckedChange={v => set('nfe_enabled', v)} />
                   <div>
-                    <Label>Módulo NF-e habilitado</Label>
-                    <p className="text-xs text-gray-400">Ativar emissão de Nota Fiscal Eletrônica</p>
+                    <Label>Módulo Fiscal habilitado</Label>
+                    <p className="text-xs text-gray-400">Ativar emissão de NFC-e (balcão) e NF-e</p>
                   </div>
                 </div>
 
                 {form.nfe_enabled && (
-                  <div className="space-y-3 p-3 bg-gray-50 rounded-lg border">
+                  <div className="space-y-4 p-3 bg-gray-50 rounded-lg border">
                     <div>
-                      <Label>URL do Provedor NF-e</Label>
-                      <Input className="mt-1" value={form.nfe_provider_url || ''} onChange={e => set('nfe_provider_url', e.target.value)} placeholder="https://api.provedor-nfe.com.br" />
+                      <Label>Ambiente da SEFAZ</Label>
+                      <Select value={form.nfe_environment || 'homologacao'} onValueChange={v => set('nfe_environment', v)}>
+                        <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="homologacao">Homologação (teste — sem valor fiscal)</SelectItem>
+                          <SelectItem value="producao">Produção (nota real)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-gray-400 mt-1">
+                        Comece sempre em <strong>Homologação</strong> para testar. Só mude para Produção
+                        depois que o contador validar os impostos.
+                      </p>
                     </div>
-                    <div>
-                      <Label>Certificado Digital (Sprint 2)</Label>
-                      <Input className="mt-1" disabled placeholder="Upload do certificado A1 (.pfx) — em breve" />
-                      <p className="text-xs text-gray-400 mt-1">Integração com SEFAZ será configurada na Sprint 2</p>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label>Série NFC-e</Label>
+                        <Input className="mt-1" value={form.nfce_series || '1'} onChange={e => set('nfce_series', e.target.value)} />
+                      </div>
+                      <div>
+                        <Label>Série NF-e</Label>
+                        <Input className="mt-1" value={form.nfe_series || '1'} onChange={e => set('nfe_series', e.target.value)} />
+                      </div>
+                    </div>
+                    <div className="text-xs text-gray-500 bg-blue-50 border border-blue-100 rounded-lg p-3 space-y-1">
+                      <p className="font-medium text-blue-800">Como funciona a emissão</p>
+                      <p>O certificado digital A1 (.pfx) e o CSC da NFC-e são cadastrados no painel do provedor fiscal (Focus NFe), não aqui. O token da conta fica guardado com segurança no servidor.</p>
+                      <p>Passo a passo completo em <code>docs/NOTA-FISCAL.md</code>.</p>
                     </div>
                   </div>
                 )}

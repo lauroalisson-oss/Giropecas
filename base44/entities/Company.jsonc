@@ -60,6 +60,41 @@
     "nfe_certificate": {
       "type": "string"
     },
+    "fiscal_provider": {
+      "type": "string",
+      "enum": [
+        "focus"
+      ],
+      "default": "focus",
+      "description": "Gateway de emissão fiscal"
+    },
+    "nfe_environment": {
+      "type": "string",
+      "enum": [
+        "homologacao",
+        "producao"
+      ],
+      "default": "homologacao",
+      "description": "Ambiente da SEFAZ: homologação (teste) ou produção (valor fiscal real)"
+    },
+    "ie": {
+      "type": "string",
+      "description": "Inscrição Estadual"
+    },
+    "im": {
+      "type": "string",
+      "description": "Inscrição Municipal"
+    },
+    "nfce_series": {
+      "type": "string",
+      "default": "1",
+      "description": "Série da NFC-e"
+    },
+    "nfe_series": {
+      "type": "string",
+      "default": "1",
+      "description": "Série da NF-e"
+    },
     "credit_conditions": {
       "type": "string"
     },

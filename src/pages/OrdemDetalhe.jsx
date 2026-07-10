@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ArrowLeft, Printer, CreditCard, Package, Wrench, User, Car, Edit, Save, X, Plus, Trash2, Search, HardHat, FileText, Receipt } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import PagamentoModal from '@/components/PagamentoModal';
+import EmitirNotaButton from '@/components/EmitirNotaButton';
 import { printDocument } from '@/components/PrintReceipt';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
@@ -258,6 +259,7 @@ export default function OrdemDetalhe() {
                   <CreditCard className="w-4 h-4 mr-1" />
                   {order.status === 'finalizada' ? 'Faturar' : 'Registrar Pagamento'}
                 </Button>
+                <EmitirNotaButton workOrderId={id} onEmitted={loadOrder} />
                 <Button size="sm" variant="outline" onClick={cancelOrder}
                   className="text-red-600 border-red-200 hover:bg-red-50">Cancelar</Button>
               </div>

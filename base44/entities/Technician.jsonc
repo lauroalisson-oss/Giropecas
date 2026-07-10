@@ -35,5 +35,11 @@
     "company_id",
     "name"
   ],
-  "name": "Technician"
+  "name": "Technician",
+  "rls": {
+    "create": true,
+    "read": true,
+    "update": true,
+    "delete": true
+  }
 }

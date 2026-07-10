@@ -24,5 +24,11 @@
     "company_id",
     "brand"
   ],
-  "name": "CardRate"
+  "name": "CardRate",
+  "rls": {
+    "create": true,
+    "read": true,
+    "update": true,
+    "delete": true
+  }
 }

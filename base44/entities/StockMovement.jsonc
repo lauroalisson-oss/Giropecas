@@ -54,5 +54,11 @@
     "type",
     "quantity"
   ],
-  "name": "StockMovement"
+  "name": "StockMovement",
+  "rls": {
+    "create": true,
+    "read": true,
+    "update": true,
+    "delete": true
+  }
 }

@@ -33,5 +33,11 @@
     "company_id",
     "name"
   ],
-  "name": "Service"
+  "name": "Service",
+  "rls": {
+    "create": true,
+    "read": true,
+    "update": true,
+    "delete": true
+  }
 }

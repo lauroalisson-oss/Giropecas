@@ -97,5 +97,11 @@
   "required": [
     "company_id"
   ],
-  "name": "Sale"
+  "name": "Sale",
+  "rls": {
+    "create": true,
+    "read": true,
+    "update": true,
+    "delete": true
+  }
 }

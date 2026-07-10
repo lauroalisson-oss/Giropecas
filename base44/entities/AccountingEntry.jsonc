@@ -54,5 +54,11 @@
     "type",
     "amount"
   ],
-  "name": "AccountingEntry"
+  "name": "AccountingEntry",
+  "rls": {
+    "create": true,
+    "read": true,
+    "update": true,
+    "delete": true
+  }
 }

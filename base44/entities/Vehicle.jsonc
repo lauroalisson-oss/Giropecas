@@ -44,5 +44,11 @@
     "customer_id",
     "model"
   ],
-  "name": "Vehicle"
+  "name": "Vehicle",
+  "rls": {
+    "create": true,
+    "read": true,
+    "update": true,
+    "delete": true
+  }
 }

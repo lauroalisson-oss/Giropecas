@@ -68,5 +68,11 @@
     "total_amount",
     "due_date"
   ],
-  "name": "CreditTitle"
+  "name": "CreditTitle",
+  "rls": {
+    "create": true,
+    "read": true,
+    "update": true,
+    "delete": true
+  }
 }

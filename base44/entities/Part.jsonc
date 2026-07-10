@@ -75,5 +75,11 @@
     "company_id",
     "description"
   ],
-  "name": "Part"
+  "name": "Part",
+  "rls": {
+    "create": true,
+    "read": true,
+    "update": true,
+    "delete": true
+  }
 }

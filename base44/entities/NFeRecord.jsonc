@@ -77,5 +77,11 @@
   "required": [
     "company_id"
   ],
-  "name": "NFeRecord"
+  "name": "NFeRecord",
+  "rls": {
+    "create": true,
+    "read": true,
+    "update": true,
+    "delete": true
+  }
 }

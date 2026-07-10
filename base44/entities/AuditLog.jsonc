@@ -37,5 +37,19 @@
     "action",
     "entity_type"
   ],
-  "name": "AuditLog"
+  "name": "AuditLog",
+  "rls": {
+    "create": true,
+    "read": true,
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
 }

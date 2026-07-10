@@ -130,5 +130,11 @@
     "company_id",
     "customer_id"
   ],
-  "name": "WorkOrder"
+  "name": "WorkOrder",
+  "rls": {
+    "create": true,
+    "read": true,
+    "update": true,
+    "delete": true
+  }
 }

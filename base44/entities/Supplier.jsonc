@@ -46,5 +46,11 @@
     "company_id",
     "name"
   ],
-  "name": "Supplier"
+  "name": "Supplier",
+  "rls": {
+    "create": true,
+    "read": true,
+    "update": true,
+    "delete": true
+  }
 }

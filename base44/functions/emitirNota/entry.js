@@ -62,28 +62,30 @@ Deno.serve(async (req) => {
     const company = await svc.entities.Company.get(companyId);
     if (!company) return Response.json({ error: 'Empresa não encontrada.' }, { status: 404 });
 
-    // Gate por plano: só o plano Fiscal pode emitir notas
-    if (company.plan_type !== 'fiscal') {
+    // Plano e limite vêm da LICENÇA ativa vinculada à empresa (fonte da verdade).
+    const activeKeys = (await svc.entities.AccessKey.filter({ company_id: companyId, status: 'active' }))
+      .sort((a, b) => new Date(b.expires_at) - new Date(a.expires_at));
+    const activeKey = activeKeys[0] || null;
+    const planType = activeKey?.plan_type || company.plan_type || 'non_fiscal';
+    const limit = activeKey?.fiscal_note_limit || company.fiscal_note_limit || 100;
+    const isAdmin = (user.email || '').trim().toLowerCase() === 'lauro.alisson@gmail.com';
+
+    // Gate por plano: só o plano Fiscal pode emitir notas (super-admin tem acesso total)
+    if (!isAdmin && planType !== 'fiscal') {
       return Response.json({
         error: 'Sua empresa está no plano Não-Fiscal. Para emitir NFC-e/NF-e, contrate o plano Fiscal com o suporte.',
         code: 'plan_non_fiscal',
       }, { status: 403 });
     }
-    if (!company.nfe_enabled) {
-      return Response.json({ error: 'Módulo fiscal desabilitado para esta empresa. Ative em Configurações → Fiscal.' }, { status: 400 });
-    }
     if (!company.cnpj) {
       return Response.json({ error: 'CNPJ da empresa não configurado.' }, { status: 400 });
     }
-
-    // Limite mensal de notas do plano (bloqueio ao atingir o teto)
-    const limit = company.fiscal_note_limit || 100;
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
     const emitidasMes = (await svc.entities.NFeRecord.filter(
       { company_id: companyId, status: 'autorizada' }, '-created_date', 500,
     )).filter(n => (n.authorized_at || n.created_date || '') >= monthStart).length;
-    if (emitidasMes >= limit) {
+    if (!isAdmin && emitidasMes >= limit) {
       return Response.json({
         error: `Você atingiu o limite de ${limit} notas do seu plano neste mês. ` +
           `Notas adicionais custam R$ 2,00 cada — entre em contato com o suporte para liberar mais notas ou negociar seu plano.`,

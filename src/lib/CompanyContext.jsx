@@ -43,15 +43,24 @@ export function CompanyProvider({ children }) {
           try { await base44.entities.AccessKey.update(license.id, { company_id: selected.id }); } catch { /* ignore */ }
         }
 
-        // Sincroniza o plano (fiscal / não-fiscal) da empresa com o da licença ativa
-        if (!superAdmin && license?.plan_type && selected.plan_type !== license.plan_type) {
-          try {
-            const patch = { plan_type: license.plan_type };
-            if (license.plan_type === 'fiscal' && !selected.fiscal_note_limit) patch.fiscal_note_limit = 100;
-            await base44.entities.Company.update(selected.id, patch);
-            Object.assign(selected, patch);
-            setCompany({ ...selected });
-          } catch { /* ignore */ }
+        // Sincroniza o plano e o grau de permissão da empresa com a licença ativa.
+        // Fonte da verdade é a chave gerada pelo super-admin.
+        if (!superAdmin && license?.plan_type) {
+          const patch = {};
+          if (selected.plan_type !== license.plan_type) patch.plan_type = license.plan_type;
+          if (license.plan_type === 'fiscal') {
+            const limiteLicenca = license.fiscal_note_limit || 100;
+            if (selected.fiscal_note_limit !== limiteLicenca) patch.fiscal_note_limit = limiteLicenca;
+            // Módulo fiscal habilitado por concessão do super-admin
+            if (selected.nfe_enabled !== true) patch.nfe_enabled = true;
+          }
+          if (Object.keys(patch).length) {
+            try {
+              await base44.entities.Company.update(selected.id, patch);
+              Object.assign(selected, patch);
+              setCompany({ ...selected });
+            } catch { /* ignore */ }
+          }
         }
       } else {
         setCompany(null);

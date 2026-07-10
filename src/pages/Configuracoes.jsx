@@ -6,7 +6,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Building2, Users, FileText, CreditCard, Save, ShieldCheck, Upload, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react';
@@ -269,16 +268,18 @@ export default function Configuracoes() {
                 )}
 
                 {isFiscalPlan && (
-                <div className="flex items-center gap-3 py-2">
-                  <Switch checked={form.nfe_enabled || false} onCheckedChange={v => set('nfe_enabled', v)} />
-                  <div>
-                    <Label>Módulo Fiscal habilitado</Label>
-                    <p className="text-xs text-gray-400">Ativar emissão de NFC-e (balcão) e NF-e</p>
+                  <div className="flex items-center justify-between gap-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-5 h-5 text-green-600" />
+                      <div>
+                        <Label className="text-green-800">Plano Fiscal liberado pelo provedor</Label>
+                        <p className="text-xs text-green-700">Emissão de NFC-e/NF-e habilitada • até {company?.fiscal_note_limit || 100} notas/mês</p>
+                      </div>
+                    </div>
                   </div>
-                </div>
                 )}
 
-                {isFiscalPlan && form.nfe_enabled && (
+                {isFiscalPlan && (
                   <div className="space-y-4 p-3 bg-gray-50 rounded-lg border">
                     <div>
                       <Label>Ambiente da SEFAZ</Label>
@@ -326,7 +327,7 @@ export default function Configuracoes() {
               <Save className="w-4 h-4 mr-2" />{saving ? 'Salvando...' : 'Salvar Configurações Fiscais'}
             </Button>
 
-            {isFiscalPlan && form.nfe_enabled && company?.id && (
+            {isFiscalPlan && company?.id && (
               <CertificadoCard company={company} setCompany={setCompany} />
             )}
           </div>

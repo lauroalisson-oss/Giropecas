@@ -18,6 +18,11 @@
       "default": "non_fiscal",
       "description": "Plano contratado: sem emissão (non_fiscal) ou com emissão de NF (fiscal)"
     },
+    "fiscal_note_limit": {
+      "type": "number",
+      "default": 100,
+      "description": "Limite de notas/mês definido pelo super-admin ao gerar a chave (plano fiscal)"
+    },
     "status": {
       "type": "string",
       "enum": [

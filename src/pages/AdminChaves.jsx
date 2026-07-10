@@ -27,6 +27,7 @@ export default function AdminChaves() {
   const [clientEmail, setClientEmail] = useState('');
   const [duration, setDuration] = useState('');
   const [planType, setPlanType] = useState('non_fiscal');
+  const [noteLimit, setNoteLimit] = useState('100');
   const [lastCreated, setLastCreated] = useState(null);
 
   const superAdmin = isSuperAdmin(user);
@@ -69,6 +70,7 @@ export default function AdminChaves() {
         client_name: clientName.trim(),
         client_email: clientEmail.trim() || undefined,
         plan_type: planType,
+        fiscal_note_limit: planType === 'fiscal' ? (Math.max(0, parseInt(noteLimit, 10) || 100)) : undefined,
         expires_at: expiresAt.toISOString(),
       });
       setLastCreated(record);
@@ -76,6 +78,7 @@ export default function AdminChaves() {
       setClientEmail('');
       setDuration('');
       setPlanType('non_fiscal');
+      setNoteLimit('100');
       toast({ title: 'Licença gerada!', description: `${key} — envie ao cliente para liberar o acesso.` });
       loadKeys();
     } catch (e) {
@@ -178,10 +181,19 @@ export default function AdminChaves() {
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="non_fiscal">Não-Fiscal (sem emissão de NF)</SelectItem>
-                  <SelectItem value="fiscal">Fiscal (emite NFC-e/NF-e — até 100 notas/mês)</SelectItem>
+                  <SelectItem value="fiscal">Fiscal (emite NFC-e/NF-e)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+            {planType === 'fiscal' && (
+              <div className="space-y-2 sm:col-span-2">
+                <Label>Limite de notas por mês</Label>
+                <Input type="number" min="0" value={noteLimit} onChange={e => setNoteLimit(e.target.value)} placeholder="100" />
+                <p className="text-xs text-gray-400">
+                  Notas incluídas no plano da empresa. Padrão 100. Você pode alterar depois, a qualquer momento, nas licenças abaixo.
+                </p>
+              </div>
+            )}
           </div>
           <Button onClick={handleCreate} disabled={creating} className="mt-4 bg-red-600 hover:bg-red-700 text-white">
             {creating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Plus className="w-4 h-4 mr-2" />}

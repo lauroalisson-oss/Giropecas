@@ -119,6 +119,20 @@ export default function Configuracoes() {
   };
 
   const set = (field, value) => setForm(prev => ({ ...prev, [field]: value }));
+
+  const maskPhone = (v) => {
+    const d = v.replace(/\D/g, '').slice(0, 11);
+    if (d.length <= 10) return d.replace(/(\d{2})(\d{4})(\d{0,4})/, '($1) $2-$3').replace(/-$/, '');
+    return d.replace(/(\d{2})(\d{5})(\d{0,4})/, '($1) $2-$3').replace(/-$/, '');
+  };
+  const maskCnpj = (v) => {
+    const d = v.replace(/\D/g, '').slice(0, 14);
+    return d.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{0,2})/, '$1.$2.$3/$4-$5').replace(/[./-]+$/, '');
+  };
+  const maskCep = (v) => {
+    const d = v.replace(/\D/g, '').slice(0, 8);
+    return d.replace(/(\d{5})(\d{0,3})/, '$1-$2').replace(/-$/, '');
+  };
   const isFiscalPlan = company?.plan_type === 'fiscal';
 
   const handleSaveCompany = async () => {
@@ -191,11 +205,11 @@ export default function Configuracoes() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label>CNPJ</Label>
-                    <Input className="mt-1" value={form.cnpj || ''} onChange={e => set('cnpj', e.target.value)} placeholder="00.000.000/0000-00" maxLength={18} />
+                    <Input className="mt-1" value={form.cnpj || ''} onChange={e => set('cnpj', maskCnpj(e.target.value))} placeholder="00.000.000/0000-00" maxLength={18} />
                   </div>
                   <div>
                     <Label>Telefone</Label>
-                    <Input className="mt-1" value={form.phone || ''} onChange={e => set('phone', e.target.value)} placeholder="(00) 00000-0000" maxLength={15} />
+                    <Input className="mt-1" value={form.phone || ''} onChange={e => set('phone', maskPhone(e.target.value))} placeholder="(00) 00000-0000" maxLength={15} />
                   </div>
                 </div>
                 <div>
@@ -218,7 +232,7 @@ export default function Configuracoes() {
                 </div>
                 <div>
                   <Label>CEP</Label>
-                  <Input className="mt-1" value={form.zip_code || ''} onChange={e => set('zip_code', e.target.value)} placeholder="00000-000" maxLength={9} />
+                  <Input className="mt-1" value={form.zip_code || ''} onChange={e => set('zip_code', maskCep(e.target.value))} placeholder="00000-000" maxLength={9} />
                 </div>
               </CardContent>
             </Card>

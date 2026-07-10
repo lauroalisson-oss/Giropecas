@@ -16,6 +16,9 @@ dist
 dist-ssr
 *.local
 
+# gerado pelo build do instalador desktop (cópia de offline-app)
+desktop/app
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

@@ -50,7 +50,7 @@ export default function Layout() {
   const initials = displayName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
 
   const visibleNavItems = superAdmin
-    ? [...navItems, { path: '/admin/chaves', label: 'Chaves de Acesso', icon: KeyRound }]
+    ? [...navItems, { path: '/admin/chaves', label: 'Admin Provedor', icon: KeyRound }]
     : navItems;
 
   const licenseDays = license?.expires_at ? daysRemaining(license.expires_at) : null;

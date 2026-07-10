@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { base44 } from '@/api/base44Client';
 import { useAuth } from '@/lib/AuthContext';
 import {
-  isSuperAdmin, validateKeyFormat, computeExpiry, isExpired,
+  isSuperAdmin, validateKeyFormat, isExpired,
 } from '@/lib/license';
 
 const LicenseContext = createContext(null);
@@ -59,9 +59,11 @@ export function LicenseProvider({ children }) {
     const record = rows[0];
 
     if (record.status === 'revoked') throw new Error('Esta chave foi revogada.');
-    if (record.status === 'expired') throw new Error('Esta chave já expirou.');
+    // O vencimento é fixado na geração da chave (embutido no código)
+    const expiresAt = record.expires_at || (check.expiresAt && check.expiresAt.toISOString());
+    if (record.status === 'expired' || isExpired(expiresAt)) throw new Error('Esta chave já venceu. Solicite uma nova chave.');
     if (record.status === 'active') {
-      if (record.activated_by === user.email && !isExpired(record.expires_at)) {
+      if (record.activated_by === user.email) {
         setLicense(record);
         setStatus('licensed');
         return record;
@@ -71,14 +73,13 @@ export function LicenseProvider({ children }) {
     if (record.status !== 'available') throw new Error('Esta chave não está disponível.');
 
     const activatedAt = new Date();
-    const expiresAt = computeExpiry(activatedAt, record.duration_days);
     await base44.entities.AccessKey.update(record.id, {
       status: 'active',
       activated_by: user.email,
       activated_at: activatedAt.toISOString(),
-      expires_at: expiresAt.toISOString(),
+      expires_at: expiresAt,
     });
-    const updated = { ...record, status: 'active', activated_by: user.email, activated_at: activatedAt.toISOString(), expires_at: expiresAt.toISOString() };
+    const updated = { ...record, status: 'active', activated_by: user.email, activated_at: activatedAt.toISOString(), expires_at: expiresAt };
     setLicense(updated);
     setStatus('licensed');
     return updated;

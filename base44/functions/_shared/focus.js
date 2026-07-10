@@ -12,6 +12,62 @@ export function focusBaseUrl(ambiente) {
     : 'https://homologacao.focusnfe.com.br';
 }
 
+// Código do regime tributário no padrão do gateway/SEFAZ.
+// 1 = Simples Nacional | 3 = Regime Normal (Lucro Presumido/Real)
+export function regimeTributarioCodigo(taxRegime) {
+  return taxRegime === 'simples_nacional' ? '1' : '3';
+}
+
+// Base64 de um Uint8Array (para enviar o certificado .pfx ao gateway).
+export function toBase64(uint8) {
+  let binary = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < uint8.length; i += chunk) {
+    binary += String.fromCharCode.apply(null, uint8.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
+const digits = (s) => String(s || '').replace(/\D/g, '');
+
+// Monta o corpo de cadastro/atualização de empresa (emitente) no gateway.
+// Envia os dados fiscais + certificado A1 + CSC — tudo o que a oficina
+// preencheu DENTRO do sistema, sem precisar acessar o painel do provedor.
+export function buildEmpresaPayload({ company, certificadoBase64, senhaCertificado }) {
+  return {
+    nome: company.name,
+    nome_fantasia: company.name,
+    cnpj: digits(company.cnpj),
+    inscricao_estadual: company.ie || 'ISENTO',
+    ...(company.im ? { inscricao_municipal: company.im } : {}),
+    regime_tributario: regimeTributarioCodigo(company.tax_regime),
+    email: company.email || undefined,
+    telefone: company.phone ? digits(company.phone) : undefined,
+    logradouro: company.address || undefined,
+    municipio: company.city || undefined,
+    uf: company.state || undefined,
+    cep: company.zip_code ? digits(company.zip_code) : undefined,
+
+    // Certificado digital A1 (.pfx) — enviado ao gateway, não guardado aqui
+    arquivo_certificado_base64: certificadoBase64,
+    senha_certificado: senhaCertificado,
+
+    // CSC da NFC-e (para os dois ambientes)
+    ...(company.csc ? {
+      csc_nfce_producao: company.csc,
+      csc_nfce_homologacao: company.csc,
+    } : {}),
+    ...(company.csc_id ? {
+      id_token_nfce_producao: company.csc_id,
+      id_token_nfce_homologacao: company.csc_id,
+    } : {}),
+
+    habilita_nfce: true,
+    habilita_nfe: true,
+    enviar_email_destinatario: false,
+  };
+}
+
 // Cabeçalho de autenticação HTTP Basic (token como usuário, senha vazia).
 export function focusAuthHeader(token) {
   const b64 = btoa(`${token}:`);

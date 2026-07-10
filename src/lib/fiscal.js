@@ -3,6 +3,18 @@
 // token do gateway com segurança — o frontend nunca vê o token.
 import { base44 } from '@/api/base44Client';
 
+// Cadastra/atualiza a empresa no provedor fiscal, enviando o certificado A1.
+// A oficina faz tudo aqui dentro — o certificado vai direto para o gateway,
+// não é guardado no banco do sistema.
+export async function cadastrarEmpresaFiscal({ companyId, certificado, senha }) {
+  const { data } = await base44.functions.invoke('cadastrarEmpresaFiscal', {
+    company_id: companyId,
+    certificado, // objeto File (.pfx) — enviado como multipart
+    senha_certificado: senha,
+  });
+  return data; // { registered, cert_expires_at, company }
+}
+
 // Emite uma nota a partir de uma venda (Sale) ou ordem de serviço (WorkOrder).
 // tipo: 'nfce' (consumidor/balcão) | 'nfe' (empresa/pessoa identificada)
 export async function emitirNota({ tipo = 'nfce', saleId, workOrderId }) {

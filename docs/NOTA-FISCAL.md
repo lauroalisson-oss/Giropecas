@@ -17,12 +17,26 @@ Giropeças  →  Backend function (guarda o token)  →  Focus NFe  →  SEFAZ
 ```
 
 - O **token da conta Focus** fica guardado como *segredo* no servidor do Base44 — nunca aparece no navegador nem no aplicativo.
-- Como **você é o provedor** (vende o acesso às oficinas), usa **uma única conta Focus** e cadastra o CNPJ + certificado de cada oficina cliente dentro dela. Assim, um token só atende todas as oficinas.
+- Como **você é o provedor** (vende o acesso às oficinas), usa **uma única conta Focus**. Todas as oficinas ficam registradas **sob essa mesma conta**, identificadas pelo CNPJ.
+
+### Multiempresas — cada oficina resolve tudo dentro do sistema
+
+Este é o ponto central do modelo SaaS: **a oficina NÃO precisa criar conta nem acessar o painel da Focus**. Ela faz tudo dentro do Giropeças:
+
+1. A oficina preenche os dados fiscais (IE, CSC) em **Configurações → Fiscal**.
+2. A oficina **envia o próprio certificado A1 (.pfx)** e a senha, ali mesmo na tela.
+3. O sistema **cadastra automaticamente** aquela empresa na sua conta Focus (via API `/v2/empresas`), enviando o certificado. Isso é feito pela função `cadastrarEmpresaFiscal`.
+4. A partir daí, a oficina emite NFC-e/NF-e normalmente — tudo por CNPJ, sob o seu token de provedor.
+
+Você (provedor) só precisa fazer **uma vez**: criar a conta Focus, pedir a habilitação da **API multiempresa** e guardar o token (passos 1–3 abaixo). Depois, cada nova oficina se auto-cadastra sozinha pelo sistema.
+
+> O certificado e a senha trafegam do navegador → função no servidor → Focus, por HTTPS, e **não são guardados** no banco do sistema. Ficam apenas na Focus.
 
 ### O que já está implementado no código
 
 | Parte | Onde |
 |---|---|
+| Cadastro da empresa no provedor (envia o certificado) | `base44/functions/cadastrarEmpresaFiscal/entry.js` |
 | Função de emissão | `base44/functions/emitirNota/entry.js` |
 | Função de consulta de status | `base44/functions/consultarNota/entry.js` |
 | Função de cancelamento | `base44/functions/cancelarNota/entry.js` |
@@ -34,19 +48,17 @@ Giropeças  →  Backend function (guarda o token)  →  Focus NFe  →  SEFAZ
 
 ---
 
-## Passo 1 — Criar a conta na Focus NFe
+## PARTE A — Configuração do provedor (você, uma vez só)
+
+### Passo 1 — Criar a conta na Focus NFe
 
 1. Acesse <https://focusnfe.com.br> e crie uma conta.
-2. No painel, vá em **Empresas → Nova empresa** e cadastre os dados da oficina (CNPJ, razão social, endereço, regime tributário).
-3. Faça o **upload do certificado digital A1** (`.pfx`) da oficina e informe a senha. (O certificado A1 é comprado numa Autoridade Certificadora — Serasa, Certisign, etc. — e custa em torno de R$ 120–200/ano.)
-4. Para **NFC-e**, cadastre o **CSC (Código de Segurança do Contribuinte)** e o **ID do CSC (Token)**. Esse código é gerado no site da SEFAZ do estado da oficina (procure por "CSC NFC-e" no portal da Fazenda do seu estado).
-5. Pegue o seu **token de acesso** em **Painel → Alterar → Token**. Há dois tokens: **homologação** (teste) e **produção**. Comece com o de homologação.
+2. Solicite ao suporte a habilitação da **API de multiempresa** (`/v2/empresas`) — é o que permite cadastrar as oficinas automaticamente pelo sistema.
+3. Pegue o seu **token de acesso** em **Painel → Alterar → Token**. Há dois: **homologação** (teste) e **produção**. Comece com o de homologação.
 
-> Cada estado tem regras próprias de habilitação da NFC-e. A Focus tem tutoriais por estado em <https://focusnfe.com.br/doc>.
+> Você **não** cadastra as oficinas manualmente aqui — elas se cadastram sozinhas pelo sistema (Parte B).
 
----
-
-## Passo 2 — Guardar o token no Base44 (segredo)
+### Passo 2 — Guardar o token no Base44 (segredo)
 
 Na sua máquina, na pasta do projeto, com o Base44 CLI instalado e autenticado:
 
@@ -55,43 +67,42 @@ Na sua máquina, na pasta do projeto, com o Base44 CLI instalado e autenticado:
 npm install -g base44@latest
 base44 login
 
-# define o token como segredo (será lido pela backend function)
+# define o token como segredo (será lido pelas backend functions)
 base44 secrets set FOCUS_NFE_TOKEN
 # cole o token quando solicitado (use o de HOMOLOGAÇÃO para começar)
 ```
 
 > Quando for para produção, rode o mesmo comando com o token de produção para substituir o valor.
 
----
-
-## Passo 3 — Publicar as backend functions
-
-Ainda na pasta do projeto:
+### Passo 3 — Publicar as backend functions
 
 ```bash
-base44 functions deploy emitirNota consultarNota cancelarNota
-```
-
-Confirme que subiram:
-
-```bash
+base44 functions deploy cadastrarEmpresaFiscal emitirNota consultarNota cancelarNota
 base44 functions list
 ```
 
 ---
 
-## Passo 4 — Configurar a empresa no sistema
+## PARTE B — Configuração de cada oficina (dentro do sistema)
+
+Cada oficina cliente faz isto **sozinha**, sem acessar a Focus:
+
+### Passo 4 — Dados fiscais + certificado
 
 1. Entre no Giropeças com a conta da oficina.
-2. Vá em **Configurações → Fiscal & NF-e**.
-3. Preencha:
-   - **Regime Tributário** (o mesmo cadastrado na Focus).
+2. Em **Configurações → Empresa**: confira **CNPJ**, endereço, cidade e UF (vão para a nota).
+3. Em **Configurações → Fiscal & NF-e**:
+   - **Regime Tributário**.
    - **Inscrição Estadual (IE)**.
    - Ative o **Módulo Fiscal habilitado**.
    - **Ambiente da SEFAZ**: deixe em **Homologação** para testar.
-   - **Série** da NFC-e e da NF-e (normalmente `1`).
-4. Confira também, na aba **Empresa**, se **CNPJ**, endereço, cidade e UF estão corretos — esses dados vão para a nota.
-5. Salve.
+   - **CSC** e **ID do CSC** (só para NFC-e — gerados grátis no portal da SEFAZ do estado).
+   - Salve.
+4. No cartão **Certificado Digital A1**, clique em **Selecionar arquivo .pfx**, escolha o certificado da empresa, digite a **senha** e clique em **Cadastrar empresa no provedor**.
+   - O certificado A1 é comprado numa Autoridade Certificadora (Serasa, Certisign, etc.), custa ~R$ 120–200/ano.
+   - Ao concluir, aparece **"Empresa cadastrada no provedor fiscal"** com a validade do certificado. Pronto para emitir.
+
+> O arquivo do certificado e a senha vão direto para o provedor e **não ficam salvos** no sistema. Para renovar (o A1 vale 1 ano), basta enviar um novo arquivo.
 
 ---
 
@@ -160,6 +171,8 @@ O código foi escrito em cima da Focus NFe, mas a lógica de payload fica isolad
 | "Integração fiscal não configurada (FOCUS_NFE_TOKEN ausente)" | Segredo não definido | Rode `base44 secrets set FOCUS_NFE_TOKEN` e faça deploy |
 | "Módulo fiscal desabilitado" | Switch desligado | Ative em Configurações → Fiscal |
 | "CNPJ da empresa não configurado" | Falta CNPJ | Preencha na aba Empresa |
+| "Falha ao cadastrar no provedor. Verifique o certificado e a senha." | Certificado inválido ou senha errada | Reenvie o `.pfx` correto com a senha certa |
+| Erro ao emitir mesmo com empresa cadastrada | Empresa não registrada no provedor | Envie o certificado em Configurações → Fiscal → Certificado Digital A1 |
 | "Nenhuma mercadoria para emitir" | Venda só tem serviços | NFC-e/NF-e é para peças; serviço usa NFS-e |
 | Rejeitada: "Rejeição: NCM inválido" | NCM da peça incorreto | Ajuste o NCM no cadastro da peça |
 | Rejeitada: "CSC..." | CSC/ID errado na Focus | Revise o CSC no painel da Focus |

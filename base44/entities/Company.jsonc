@@ -95,6 +95,28 @@
       "default": "1",
       "description": "Série da NF-e"
     },
+    "csc": {
+      "type": "string",
+      "description": "Código de Segurança do Contribuinte (CSC) da NFC-e"
+    },
+    "csc_id": {
+      "type": "string",
+      "description": "ID/Token do CSC da NFC-e"
+    },
+    "fiscal_registered": {
+      "type": "boolean",
+      "default": false,
+      "description": "Empresa já cadastrada no provedor fiscal (certificado enviado)"
+    },
+    "fiscal_cert_expires_at": {
+      "type": "string",
+      "format": "date",
+      "description": "Validade do certificado digital A1"
+    },
+    "fiscal_status_message": {
+      "type": "string",
+      "description": "Última mensagem retornada pelo provedor fiscal"
+    },
     "credit_conditions": {
       "type": "string"
     },

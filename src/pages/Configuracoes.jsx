@@ -9,9 +9,94 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
-import { Building2, Users, FileText, CreditCard, Save } from 'lucide-react';
+import { Building2, Users, FileText, CreditCard, Save, ShieldCheck, Upload, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react';
 import TaxasCartao from './TaxasCartao';
 import { useToast } from '@/components/ui/use-toast';
+import { cadastrarEmpresaFiscal } from '@/lib/fiscal';
+
+// Upload do certificado A1 + cadastro automático da empresa no provedor fiscal.
+// A oficina resolve tudo aqui: o certificado vai direto para o gateway.
+function CertificadoCard({ company, setCompany }) {
+  const { toast } = useToast();
+  const [file, setFile] = useState(null);
+  const [senha, setSenha] = useState('');
+  const [sending, setSending] = useState(false);
+
+  const handleUpload = async () => {
+    if (!file) { toast({ title: 'Selecione o arquivo do certificado (.pfx)', variant: 'destructive' }); return; }
+    if (!senha) { toast({ title: 'Informe a senha do certificado', variant: 'destructive' }); return; }
+    setSending(true);
+    try {
+      const result = await cadastrarEmpresaFiscal({ companyId: company.id, certificado: file, senha });
+      setCompany({ ...company, ...(result?.company || {}), fiscal_registered: true, fiscal_cert_expires_at: result?.cert_expires_at || company.fiscal_cert_expires_at });
+      setFile(null); setSenha('');
+      toast({ title: 'Empresa cadastrada no provedor!', description: 'Certificado enviado com sucesso. Já é possível emitir notas.' });
+    } catch (e) {
+      toast({ title: 'Erro ao cadastrar certificado', description: e.message, variant: 'destructive' });
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const vencProximo = company.fiscal_cert_expires_at &&
+    (new Date(company.fiscal_cert_expires_at).getTime() - Date.now()) < 30 * 86400000;
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-sm flex items-center gap-2"><ShieldCheck className="w-4 h-4" />Certificado Digital A1</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {company.fiscal_registered ? (
+          <div className="flex items-start gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+            <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+            <div className="text-sm">
+              <p className="font-medium text-green-800">Empresa cadastrada no provedor fiscal</p>
+              {company.fiscal_cert_expires_at && (
+                <p className={vencProximo ? 'text-red-600 mt-0.5' : 'text-green-700 mt-0.5'}>
+                  Certificado válido até {new Date(company.fiscal_cert_expires_at).toLocaleDateString('pt-BR')}
+                  {vencProximo && ' — renove em breve'}
+                </p>
+              )}
+              <p className="text-green-700 mt-0.5">Envie um novo arquivo abaixo apenas para renovar/substituir o certificado.</p>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+            <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-amber-800">
+              Envie o certificado digital <strong>A1 (.pfx)</strong> da empresa para habilitar a emissão.
+              O arquivo vai direto para o provedor fiscal e <strong>não fica salvo</strong> no sistema.
+            </p>
+          </div>
+        )}
+
+        <div>
+          <Label>Arquivo do certificado (.pfx)</Label>
+          <div className="mt-1 flex items-center gap-2">
+            <label className="flex-1">
+              <div className="flex items-center gap-2 px-3 h-10 border rounded-md cursor-pointer hover:bg-gray-50 text-sm text-gray-600">
+                <Upload className="w-4 h-4" />
+                <span className="truncate">{file ? file.name : 'Selecionar arquivo .pfx'}</span>
+              </div>
+              <input type="file" accept=".pfx,.p12" className="hidden"
+                onChange={e => setFile(e.target.files?.[0] || null)} />
+            </label>
+          </div>
+        </div>
+        <div>
+          <Label>Senha do certificado</Label>
+          <Input type="password" className="mt-1" value={senha} onChange={e => setSenha(e.target.value)} placeholder="••••••••" autoComplete="off" />
+        </div>
+
+        <Button onClick={handleUpload} disabled={sending} className="w-full bg-red-600 hover:bg-red-700 text-white">
+          {sending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ShieldCheck className="w-4 h-4 mr-2" />}
+          {sending ? 'Enviando ao provedor...' : (company.fiscal_registered ? 'Atualizar certificado' : 'Cadastrar empresa no provedor')}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function Configuracoes() {
   const { company, setCompany } = useCompany();
@@ -206,11 +291,19 @@ export default function Configuracoes() {
                         <Input className="mt-1" value={form.nfe_series || '1'} onChange={e => set('nfe_series', e.target.value)} />
                       </div>
                     </div>
-                    <div className="text-xs text-gray-500 bg-blue-50 border border-blue-100 rounded-lg p-3 space-y-1">
-                      <p className="font-medium text-blue-800">Como funciona a emissão</p>
-                      <p>O certificado digital A1 (.pfx) e o CSC da NFC-e são cadastrados no painel do provedor fiscal (Focus NFe), não aqui. O token da conta fica guardado com segurança no servidor.</p>
-                      <p>Passo a passo completo em <code>docs/NOTA-FISCAL.md</code>.</p>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label>CSC (NFC-e)</Label>
+                        <Input className="mt-1" value={form.csc || ''} onChange={e => set('csc', e.target.value)} placeholder="Código gerado na SEFAZ" />
+                      </div>
+                      <div>
+                        <Label>ID do CSC</Label>
+                        <Input className="mt-1" value={form.csc_id || ''} onChange={e => set('csc_id', e.target.value)} placeholder="ex: 000001" />
+                      </div>
                     </div>
+                    <p className="text-xs text-gray-400">
+                      O CSC é gerado gratuitamente no portal da SEFAZ do seu estado (necessário só para NFC-e).
+                    </p>
                   </div>
                 )}
               </CardContent>
@@ -219,6 +312,10 @@ export default function Configuracoes() {
             <Button onClick={handleSaveCompany} disabled={saving} className="w-full bg-red-600 hover:bg-red-700 text-white">
               <Save className="w-4 h-4 mr-2" />{saving ? 'Salvando...' : 'Salvar Configurações Fiscais'}
             </Button>
+
+            {form.nfe_enabled && company?.id && (
+              <CertificadoCard company={company} setCompany={setCompany} />
+            )}
           </div>
         </TabsContent>
 

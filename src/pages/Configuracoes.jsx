@@ -135,7 +135,7 @@ export default function Configuracoes() {
     const d = v.replace(/\D/g, '').slice(0, 8);
     return d.replace(/(\d{5})(\d{0,3})/, '$1-$2').replace(/-$/, '');
   };
-  const isFiscalPlan = company?.plan_type === 'fiscal';
+  const isFiscalPlan = isFiscal; // plano vem da licença ativa
 
   const handleSaveCompany = async () => {
     setSaving(true);

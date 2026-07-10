@@ -64,5 +64,11 @@
     "company_id",
     "name"
   ],
-  "name": "Customer"
+  "name": "Customer",
+  "rls": {
+    "create": true,
+    "read": true,
+    "update": true,
+    "delete": true
+  }
 }

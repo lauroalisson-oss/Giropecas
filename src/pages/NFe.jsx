@@ -1,16 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useCompany } from '@/lib/CompanyContext';
-import { formatCurrency, formatDate, formatDateTime, getStatusColor, getStatusLabel } from '@/lib/formatters';
+import { formatCurrency, formatDateTime } from '@/lib/formatters';
+import { consultarNota, notesThisMonth, NFE_STATUS_LABEL, NFE_STATUS_COLOR } from '@/lib/fiscal';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { FileText, AlertCircle, CheckCircle, Clock, Info } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
+import { FileText, AlertCircle, CheckCircle, Clock, Info, RefreshCw, Gauge } from 'lucide-react';
+import { useToast } from '@/components/ui/use-toast';
+import { cn } from '@/lib/utils';
 
 export default function NFe() {
   const { company } = useCompany();
+  const { toast } = useToast();
   const [nfes, setNfes] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [checking, setChecking] = useState(null);
 
   useEffect(() => { if (company?.id) loadNFes(); }, [company]);
 
@@ -21,25 +26,27 @@ export default function NFe() {
     setLoading(false);
   };
 
-  const nfeStatusColor = (status) => {
-    const map = {
-      rascunho: 'bg-gray-100 text-gray-700',
-      validando: 'bg-blue-100 text-blue-700',
-      enviada: 'bg-yellow-100 text-yellow-700',
-      autorizada: 'bg-green-100 text-green-700',
-      rejeitada: 'bg-red-100 text-red-700',
-      cancelada: 'bg-gray-100 text-gray-500',
-    };
-    return map[status] || 'bg-gray-100 text-gray-700';
+  const handleCheck = async (nfeId) => {
+    setChecking(nfeId);
+    try {
+      const result = await consultarNota(nfeId);
+      toast({ title: `Status: ${NFE_STATUS_LABEL[result.status] || result.status}` });
+      loadNFes();
+    } catch (e) {
+      toast({ title: 'Erro ao consultar', description: e.message, variant: 'destructive' });
+    } finally {
+      setChecking(null);
+    }
   };
 
-  const nfeStatusLabel = (status) => {
-    const map = {
-      rascunho: 'Rascunho', validando: 'Validando', enviada: 'Enviada',
-      autorizada: 'Autorizada', rejeitada: 'Rejeitada', cancelada: 'Cancelada',
-    };
-    return map[status] || status;
-  };
+  const nfeStatusColor = (status) => NFE_STATUS_COLOR[status] || 'bg-gray-100 text-gray-700';
+  const nfeStatusLabel = (status) => NFE_STATUS_LABEL[status] || status;
+
+  const isFiscalPlan = company?.plan_type === 'fiscal';
+  const noteLimit = company?.fiscal_note_limit || 100;
+  const usedThisMonth = notesThisMonth(nfes);
+  const limitReached = usedThisMonth >= noteLimit;
+  const nearLimit = usedThisMonth >= noteLimit * 0.9;
 
   return (
     <div className="p-4 lg:p-6 pb-20 lg:pb-6">
@@ -48,25 +55,71 @@ export default function NFe() {
         <p className="text-gray-500 text-sm">Notas Fiscais Eletrônicas</p>
       </div>
 
+      {/* Plano Não-Fiscal */}
+      {!isFiscalPlan && (
+        <Card className="mb-6 border-slate-200 bg-slate-50">
+          <CardContent className="p-4">
+            <div className="flex items-start gap-3">
+              <Info className="w-5 h-5 text-slate-500 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="font-semibold text-slate-800">Plano Não-Fiscal</p>
+                <p className="text-sm text-slate-600 mt-1">
+                  Sua empresa está no plano <strong>Não-Fiscal</strong>, que não inclui emissão de notas.
+                  Para emitir NFC-e/NF-e, contrate o <strong>plano Fiscal</strong> com o suporte.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Medidor de notas do mês (plano fiscal) */}
+      {isFiscalPlan && (
+        <Card className={cn('mb-6', limitReached ? 'border-red-200 bg-red-50' : nearLimit ? 'border-orange-200 bg-orange-50' : 'border-gray-200')}>
+          <CardContent className="p-4">
+            <div className="flex items-start gap-3">
+              <Gauge className={cn('w-5 h-5 mt-0.5 flex-shrink-0', limitReached ? 'text-red-600' : nearLimit ? 'text-orange-600' : 'text-gray-500')} />
+              <div className="flex-1">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <p className="font-semibold text-gray-800">Notas emitidas neste mês</p>
+                  <span className={cn('font-bold', limitReached ? 'text-red-600' : nearLimit ? 'text-orange-600' : 'text-gray-700')}>
+                    {usedThisMonth} / {noteLimit}
+                  </span>
+                </div>
+                <div className="mt-2 h-2 bg-gray-200 rounded-full overflow-hidden">
+                  <div className={cn('h-full rounded-full', limitReached ? 'bg-red-500' : nearLimit ? 'bg-orange-500' : 'bg-green-500')}
+                    style={{ width: `${Math.min(100, (usedThisMonth / noteLimit) * 100)}%` }} />
+                </div>
+                {limitReached ? (
+                  <p className="text-sm text-red-700 mt-2">
+                    Limite do plano atingido. Notas adicionais custam <strong>R$ 2,00 cada</strong> —
+                    entre em contato com o suporte para liberar mais notas ou negociar seu plano.
+                  </p>
+                ) : nearLimit ? (
+                  <p className="text-sm text-orange-700 mt-2">
+                    Você está perto do limite mensal. Ao atingir {noteLimit}, a emissão é bloqueada
+                    (notas extras: R$ 2,00 cada, mediante contato com o suporte).
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Module status banner */}
-      {!company?.nfe_enabled && (
+      {isFiscalPlan && !company?.nfe_enabled && (
         <Card className="mb-6 border-yellow-200 bg-yellow-50">
           <CardContent className="p-4">
             <div className="flex items-start gap-3">
               <Info className="w-5 h-5 text-yellow-600 mt-0.5 flex-shrink-0" />
               <div>
-                <p className="font-semibold text-yellow-800">Módulo NF-e — Aguardando Ativação</p>
+                <p className="font-semibold text-yellow-800">Módulo Fiscal desativado</p>
                 <p className="text-sm text-yellow-700 mt-1">
-                  O módulo de emissão de NF-e está estruturado e pronto para integração com o provedor SEFAZ.
-                  Para ativar, configure o certificado digital e a URL do provedor nas
-                  <strong> Configurações da Empresa</strong>.
+                  Para emitir NFC-e (balcão) e NF-e, ative o módulo em
+                  <strong> Configurações → Fiscal &amp; NF-e</strong> e conclua a configuração do provedor fiscal.
+                  O passo a passo completo está em <code>docs/NOTA-FISCAL.md</code>.
                 </p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <Badge className="bg-green-100 text-green-700">✓ Estrutura de dados pronta</Badge>
-                  <Badge className="bg-green-100 text-green-700">✓ Campos NCM/CFOP configurados</Badge>
-                  <Badge className="bg-yellow-100 text-yellow-700">⏳ Integração SEFAZ — Sprint 2</Badge>
-                  <Badge className="bg-yellow-100 text-yellow-700">⏳ Certificado digital — Sprint 2</Badge>
-                </div>
               </div>
             </div>
           </CardContent>
@@ -118,9 +171,16 @@ export default function NFe() {
                   </div>
                   <div className="text-right flex-shrink-0">
                     <p className="font-bold text-gray-900">{formatCurrency(nfe.total_amount)}</p>
-                    <div className="flex gap-2 mt-1">
+                    <div className="flex gap-2 mt-1 items-center justify-end">
                       {nfe.danfe_url && <a href={nfe.danfe_url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline">DANFE</a>}
                       {nfe.xml_url && <a href={nfe.xml_url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline">XML</a>}
+                      {['enviada', 'validando'].includes(nfe.status) && (
+                        <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" disabled={checking === nfe.id}
+                          onClick={() => handleCheck(nfe.id)}>
+                          <RefreshCw className={`w-3 h-3 mr-1 ${checking === nfe.id ? 'animate-spin' : ''}`} />
+                          Consultar
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </CardContent>

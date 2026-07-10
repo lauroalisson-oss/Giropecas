@@ -60,6 +60,77 @@
     "nfe_certificate": {
       "type": "string"
     },
+    "fiscal_provider": {
+      "type": "string",
+      "enum": [
+        "focus"
+      ],
+      "default": "focus",
+      "description": "Gateway de emissão fiscal"
+    },
+    "nfe_environment": {
+      "type": "string",
+      "enum": [
+        "homologacao",
+        "producao"
+      ],
+      "default": "homologacao",
+      "description": "Ambiente da SEFAZ: homologação (teste) ou produção (valor fiscal real)"
+    },
+    "ie": {
+      "type": "string",
+      "description": "Inscrição Estadual"
+    },
+    "im": {
+      "type": "string",
+      "description": "Inscrição Municipal"
+    },
+    "nfce_series": {
+      "type": "string",
+      "default": "1",
+      "description": "Série da NFC-e"
+    },
+    "nfe_series": {
+      "type": "string",
+      "default": "1",
+      "description": "Série da NF-e"
+    },
+    "csc": {
+      "type": "string",
+      "description": "Código de Segurança do Contribuinte (CSC) da NFC-e"
+    },
+    "csc_id": {
+      "type": "string",
+      "description": "ID/Token do CSC da NFC-e"
+    },
+    "plan_type": {
+      "type": "string",
+      "enum": [
+        "non_fiscal",
+        "fiscal"
+      ],
+      "default": "non_fiscal",
+      "description": "Plano contratado pela empresa: sem ou com emissão de NF"
+    },
+    "fiscal_note_limit": {
+      "type": "number",
+      "default": 100,
+      "description": "Limite de notas fiscais emitidas por mês incluído no plano"
+    },
+    "fiscal_registered": {
+      "type": "boolean",
+      "default": false,
+      "description": "Empresa já cadastrada no provedor fiscal (certificado enviado)"
+    },
+    "fiscal_cert_expires_at": {
+      "type": "string",
+      "format": "date",
+      "description": "Validade do certificado digital A1"
+    },
+    "fiscal_status_message": {
+      "type": "string",
+      "description": "Última mensagem retornada pelo provedor fiscal"
+    },
     "credit_conditions": {
       "type": "string"
     },

@@ -15,6 +15,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useToast } from '@/components/ui/use-toast';
 import { printDocument } from '@/components/PrintReceipt';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import EmitirNotaButton from '@/components/EmitirNotaButton';
+import { NFE_STATUS_LABEL, NFE_STATUS_COLOR } from '@/lib/fiscal';
 
 const STATUS_COLORS = {
   aberta: 'bg-blue-100 text-blue-700',
@@ -58,6 +60,7 @@ export default function Historico() {
   const [services, setServices] = useState([]);
   const [parts, setParts] = useState([]);
   const [technicians, setTechnicians] = useState([]);
+  const [nfes, setNfes] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // Filters
@@ -79,13 +82,14 @@ export default function Historico() {
 
   const loadData = async () => {
     setLoading(true);
-    const [ord, sal, custs, svcs, pts, techs] = await Promise.all([
+    const [ord, sal, custs, svcs, pts, techs, notas] = await Promise.all([
       base44.entities.WorkOrder.filter({ company_id: company.id }, '-created_date', 200),
       base44.entities.Sale.filter({ company_id: company.id }, '-created_date', 200),
       base44.entities.Customer.filter({ company_id: company.id }),
       base44.entities.Service.filter({ company_id: company.id }),
       base44.entities.Part.filter({ company_id: company.id }),
       base44.entities.Technician.filter({ company_id: company.id }),
+      base44.entities.NFeRecord.filter({ company_id: company.id }, '-created_date', 300).catch(() => []),
     ]);
     setOrders(ord);
     setSales(sal);
@@ -93,6 +97,7 @@ export default function Historico() {
     setServices(svcs);
     setParts(pts);
     setTechnicians(techs);
+    setNfes(notas);
     setLoading(false);
   };
 
@@ -100,6 +105,15 @@ export default function Historico() {
   const serviceMap = Object.fromEntries(services.map(s => [s.id, s.name]));
   const partMap = Object.fromEntries(parts.map(p => [p.id, { description: p.description, stock: p.stock_quantity }]));
   const technicianMap = Object.fromEntries(technicians.map(t => [t.id, t]));
+  const partsById = Object.fromEntries(parts.map(p => [p.id, p]));
+
+  // Última nota fiscal por venda e por OS (para mostrar status/DANFE no histórico)
+  const nfeBySale = {};
+  const nfeByOrder = {};
+  for (const n of nfes) {
+    if (n.sale_id && !nfeBySale[n.sale_id]) nfeBySale[n.sale_id] = n;
+    if (n.work_order_id && !nfeByOrder[n.work_order_id]) nfeByOrder[n.work_order_id] = n;
+  }
 
   const inDateRange = (dateStr) => {
     if (!dateStr) return true;
@@ -149,6 +163,21 @@ export default function Historico() {
   };
 
   const hasFilters = dateFrom || dateTo || filterService !== 'all' || filterPart !== 'all' || filterStatus !== 'all' || filterPayment !== 'all' || search;
+
+  // Selo da nota já emitida (com link para DANFE quando autorizada)
+  const NotaSelo = ({ nota }) => {
+    if (!nota) return null;
+    const color = NFE_STATUS_COLOR[nota.status] || 'bg-gray-100 text-gray-600';
+    return (
+      <div className="flex items-center gap-1.5">
+        <Badge className={`text-xs ${color}`}>NF: {NFE_STATUS_LABEL[nota.status] || nota.status}</Badge>
+        {nota.danfe_url && (
+          <a href={nota.danfe_url} target="_blank" rel="noopener noreferrer"
+            className="text-xs text-blue-600 hover:underline">DANFE</a>
+        )}
+      </div>
+    );
+  };
 
   const totalOS = filteredOrders.reduce((s, o) => s + (o.total || 0), 0);
   const totalPDV = filteredPdvSales.reduce((s, sv) => s + (sv.total || 0), 0);
@@ -386,6 +415,12 @@ export default function Historico() {
                               ))}
                             </div>
                           )}
+                          <div className="mt-2 flex items-center gap-2 flex-wrap">
+                            {nfeByOrder[order.id] && <NotaSelo nota={nfeByOrder[order.id]} />}
+                            {(!nfeByOrder[order.id] || ['rejeitada', 'cancelada'].includes(nfeByOrder[order.id].status)) && (
+                              <EmitirNotaButton workOrderId={order.id} items={order.parts_items} partsById={partsById} onEmitted={loadData} />
+                            )}
+                          </div>
                         </div>
                         <div className="flex items-start gap-2 flex-shrink-0">
                           <div className="text-right">
@@ -477,6 +512,12 @@ export default function Historico() {
                               ))}
                             </div>
                           )}
+                          <div className="mt-2 flex items-center gap-2 flex-wrap">
+                            {nfeBySale[sale.id] && <NotaSelo nota={nfeBySale[sale.id]} />}
+                            {(!nfeBySale[sale.id] || ['rejeitada', 'cancelada'].includes(nfeBySale[sale.id].status)) && (
+                              <EmitirNotaButton saleId={sale.id} items={sale.items} partsById={partsById} onEmitted={loadData} />
+                            )}
+                          </div>
                         </div>
                         <div className="flex items-start gap-2 flex-shrink-0">
                           <div className="text-right">

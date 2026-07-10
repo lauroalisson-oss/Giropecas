@@ -9,6 +9,15 @@
       "type": "number",
       "description": "Validade da chave em dias (3, 5, 15, 30, 90, 180 ou 365)"
     },
+    "plan_type": {
+      "type": "string",
+      "enum": [
+        "non_fiscal",
+        "fiscal"
+      ],
+      "default": "non_fiscal",
+      "description": "Plano contratado: sem emissão (non_fiscal) ou com emissão de NF (fiscal)"
+    },
     "status": {
       "type": "string",
       "enum": [

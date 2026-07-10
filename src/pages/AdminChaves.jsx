@@ -26,6 +26,7 @@ export default function AdminChaves() {
   const [clientName, setClientName] = useState('');
   const [clientEmail, setClientEmail] = useState('');
   const [duration, setDuration] = useState('');
+  const [planType, setPlanType] = useState('non_fiscal');
   const [lastCreated, setLastCreated] = useState(null);
 
   const superAdmin = isSuperAdmin(user);
@@ -67,12 +68,14 @@ export default function AdminChaves() {
         status: 'available',
         client_name: clientName.trim(),
         client_email: clientEmail.trim() || undefined,
+        plan_type: planType,
         expires_at: expiresAt.toISOString(),
       });
       setLastCreated(record);
       setClientName('');
       setClientEmail('');
       setDuration('');
+      setPlanType('non_fiscal');
       toast({ title: 'Licença gerada!', description: `${key} — envie ao cliente para liberar o acesso.` });
       loadKeys();
     } catch (e) {
@@ -158,7 +161,7 @@ export default function AdminChaves() {
                   onChange={e => setClientEmail(e.target.value)} />
               </div>
             </div>
-            <div className="space-y-2 sm:col-span-2">
+            <div className="space-y-2">
               <Label>Duração da Licença *</Label>
               <Select value={duration} onValueChange={setDuration}>
                 <SelectTrigger><SelectValue placeholder="Selecione a duração..." /></SelectTrigger>
@@ -166,6 +169,16 @@ export default function AdminChaves() {
                   {DURATION_OPTIONS.map(o => (
                     <SelectItem key={o.days} value={String(o.days)}>{o.label}</SelectItem>
                   ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Plano *</Label>
+              <Select value={planType} onValueChange={setPlanType}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="non_fiscal">Não-Fiscal (sem emissão de NF)</SelectItem>
+                  <SelectItem value="fiscal">Fiscal (emite NFC-e/NF-e — até 100 notas/mês)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -217,6 +230,11 @@ export default function AdminChaves() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-semibold text-gray-900">{k.client_name || 'Sem nome'}</span>
                       {keyBadge(k)}
+                      <Badge className={k.plan_type === 'fiscal'
+                        ? 'bg-purple-100 text-purple-700 hover:bg-purple-100'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-100'}>
+                        {k.plan_type === 'fiscal' ? 'Fiscal' : 'Não-Fiscal'}
+                      </Badge>
                       <span className="text-xs text-gray-500">{durationLabel(k.duration_days)}</span>
                     </div>
                     <div className="flex items-center gap-x-4 gap-y-1 flex-wrap mt-1.5 text-xs text-gray-500">
@@ -234,6 +252,9 @@ export default function AdminChaves() {
                         <span className="flex items-center gap-1"><User className="w-3 h-3" />Ativada por: {k.activated_by}</span>
                       )}
                     </div>
+                    {k.plan_type === 'fiscal' && k.company_id && (
+                      <NoteLimitControl companyId={k.company_id} toast={toast} />
+                    )}
                   </div>
                   <div className="flex items-center flex-shrink-0">
                     <Button variant="ghost" size="icon" title="Copiar chave" onClick={() => copyKey(k.key)}>
@@ -254,6 +275,44 @@ export default function AdminChaves() {
           )}
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+// Controle do limite mensal de notas de uma empresa fiscal (usado pelo suporte
+// para "negociar" mais notas quando o cliente estoura o teto do plano).
+function NoteLimitControl({ companyId, toast }) {
+  const [limit, setLimit] = useState('');
+  const [loaded, setLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    base44.entities.Company.get(companyId)
+      .then(c => { if (active) { setLimit(String(c?.fiscal_note_limit ?? 100)); setLoaded(true); } })
+      .catch(() => { if (active) { setLimit('100'); setLoaded(true); } });
+    return () => { active = false; };
+  }, [companyId]);
+
+  const save = async () => {
+    const value = Math.max(0, parseInt(limit, 10) || 0);
+    setSaving(true);
+    try {
+      await base44.entities.Company.update(companyId, { fiscal_note_limit: value });
+      toast({ title: 'Limite atualizado', description: `${value} notas/mês liberadas para esta empresa.` });
+    } catch (e) {
+      toast({ title: 'Erro ao atualizar limite', description: e.message, variant: 'destructive' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!loaded) return null;
+  return (
+    <div className="flex items-center gap-2 mt-2">
+      <span className="text-xs text-gray-500">Limite de notas/mês:</span>
+      <Input type="number" min="0" value={limit} onChange={e => setLimit(e.target.value)} className="h-7 w-24 text-xs" />
+      <Button size="sm" variant="outline" className="h-7 text-xs" disabled={saving} onClick={save}>Salvar</Button>
     </div>
   );
 }

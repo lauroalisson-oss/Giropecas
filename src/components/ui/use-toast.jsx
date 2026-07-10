@@ -2,7 +2,8 @@
 import { useState, useEffect } from "react";
 
 const TOAST_LIMIT = 3;
-const TOAST_REMOVE_DELAY = 3000;
+// Tempo que o toast fica visível antes de sumir sozinho (ms).
+const TOAST_REMOVE_DELAY = 4000;
 
 const actionTypes = {
   ADD_TOAST: "ADD_TOAST",
@@ -36,7 +37,7 @@ const addToRemoveQueue = (toastId) => {
   toastTimeouts.set(toastId, timeout);
 };
 
-const _clearFromRemoveQueue = (toastId) => {
+const clearFromRemoveQueue = (toastId) => {
   const timeout = toastTimeouts.get(toastId);
   if (timeout) {
     clearTimeout(timeout);
@@ -119,8 +120,11 @@ function toast({ ...props }) {
       toast: { ...props, id },
     });
 
-  const dismiss = () =>
-    dispatch({ type: actionTypes.DISMISS_TOAST, toastId: id });
+  // Remove imediatamente (usado pelo botão X / fechamento manual)
+  const dismiss = () => {
+    clearFromRemoveQueue(id);
+    dispatch({ type: actionTypes.REMOVE_TOAST, toastId: id });
+  };
 
   dispatch({
     type: actionTypes.ADD_TOAST,
@@ -133,6 +137,9 @@ function toast({ ...props }) {
       },
     },
   });
+
+  // Auto-fechamento: some sozinho após TOAST_REMOVE_DELAY
+  addToRemoveQueue(id);
 
   return {
     id,
@@ -152,12 +159,15 @@ function useToast() {
         listeners.splice(index, 1);
       }
     };
-  }, [state]);
+  }, []);
 
   return {
     ...state,
     toast,
-    dismiss: (toastId) => dispatch({ type: actionTypes.DISMISS_TOAST, toastId }),
+    dismiss: (toastId) => {
+      clearFromRemoveQueue(toastId);
+      dispatch({ type: actionTypes.REMOVE_TOAST, toastId });
+    },
   };
 }
 

@@ -66,6 +66,22 @@ export function fiscalIssues({ items, partsById, company }) {
   return issues;
 }
 
+export const PLAN_LABELS = {
+  non_fiscal: 'Não-Fiscal',
+  fiscal: 'Fiscal (com emissão de NF)',
+};
+
+// Conta as notas autorizadas no mês corrente (para o medidor do plano).
+export function notesThisMonth(nfes) {
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+  return (nfes || []).filter(n => {
+    if (n.status !== 'autorizada') return false;
+    const d = new Date(n.authorized_at || n.created_date || 0).getTime();
+    return d >= monthStart;
+  }).length;
+}
+
 export const NFE_STATUS_LABEL = {
   rascunho: 'Rascunho',
   validando: 'Validando',

@@ -6,6 +6,22 @@ Este guia explica como ativar e usar a **emissão de nota fiscal** (NFC-e de bal
 
 ---
 
+## Planos (Fiscal x Não-Fiscal)
+
+O sistema trabalha com **dois planos**, definidos na **chave de acesso** que o super-admin gera no Admin Provedor:
+
+| Plano | Emite nota? | Ideia de preço |
+|---|---|---|
+| **Não-Fiscal** | Não | R$ 100,00/mês |
+| **Fiscal** | Sim — NFC-e/NF-e, até **100 notas/mês** | R$ 179,90/mês |
+
+- O **aplicativo offline é sempre Não-Fiscal** (não emite nota).
+- No online, o plano vem embutido na licença: ao ativar a chave, a empresa recebe o plano correspondente. Se estiver no Não-Fiscal, a emissão fica indisponível.
+- **Limite mensal:** ao atingir **100 notas autorizadas no mês**, a emissão é **bloqueada** e o sistema avisa que notas adicionais custam **R$ 2,00 cada**, orientando o cliente a falar com o suporte. O super-admin pode **aumentar o limite** de uma empresa no Admin Provedor (campo "Limite de notas/mês"), que é a forma de "negociar" mais volume.
+- O medidor "X / 100" aparece na página **NF-e** e fica laranja perto do limite, vermelho ao atingir.
+
+> Base do custo: o plano **Start da Focus (R$ 113,90/mês)** cobre **3 empresas** com 100 notas cada. Com o plano Fiscal a R$ 179,90, a primeira empresa já cobre o custo da Focus; ao encher as 3, a margem melhora bastante. Conforme crescer, migra-se o plano na Focus.
+
 ## Como funciona (visão geral)
 
 O sistema **não fala direto com a SEFAZ** (isso exigiria assinar XML, lidar com WebServices de cada estado, contingência, etc.). Em vez disso, ele usa um **gateway fiscal** — a **Focus NFe** — que cuida de toda a parte pesada. O fluxo é:

@@ -103,6 +103,20 @@
       "type": "string",
       "description": "ID/Token do CSC da NFC-e"
     },
+    "plan_type": {
+      "type": "string",
+      "enum": [
+        "non_fiscal",
+        "fiscal"
+      ],
+      "default": "non_fiscal",
+      "description": "Plano contratado pela empresa: sem ou com emissão de NF"
+    },
+    "fiscal_note_limit": {
+      "type": "number",
+      "default": 100,
+      "description": "Limite de notas fiscais emitidas por mês incluído no plano"
+    },
     "fiscal_registered": {
       "type": "boolean",
       "default": false,

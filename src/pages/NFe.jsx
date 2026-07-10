@@ -2,12 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useCompany } from '@/lib/CompanyContext';
 import { formatCurrency, formatDateTime } from '@/lib/formatters';
-import { consultarNota, NFE_STATUS_LABEL, NFE_STATUS_COLOR } from '@/lib/fiscal';
+import { consultarNota, notesThisMonth, NFE_STATUS_LABEL, NFE_STATUS_COLOR } from '@/lib/fiscal';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
-import { FileText, AlertCircle, CheckCircle, Clock, Info, RefreshCw } from 'lucide-react';
+import { FileText, AlertCircle, CheckCircle, Clock, Info, RefreshCw, Gauge } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import { cn } from '@/lib/utils';
 
 export default function NFe() {
   const { company } = useCompany();
@@ -41,6 +42,12 @@ export default function NFe() {
   const nfeStatusColor = (status) => NFE_STATUS_COLOR[status] || 'bg-gray-100 text-gray-700';
   const nfeStatusLabel = (status) => NFE_STATUS_LABEL[status] || status;
 
+  const isFiscalPlan = company?.plan_type === 'fiscal';
+  const noteLimit = company?.fiscal_note_limit || 100;
+  const usedThisMonth = notesThisMonth(nfes);
+  const limitReached = usedThisMonth >= noteLimit;
+  const nearLimit = usedThisMonth >= noteLimit * 0.9;
+
   return (
     <div className="p-4 lg:p-6 pb-20 lg:pb-6">
       <div className="mb-6">
@@ -48,8 +55,60 @@ export default function NFe() {
         <p className="text-gray-500 text-sm">Notas Fiscais Eletrônicas</p>
       </div>
 
+      {/* Plano Não-Fiscal */}
+      {!isFiscalPlan && (
+        <Card className="mb-6 border-slate-200 bg-slate-50">
+          <CardContent className="p-4">
+            <div className="flex items-start gap-3">
+              <Info className="w-5 h-5 text-slate-500 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="font-semibold text-slate-800">Plano Não-Fiscal</p>
+                <p className="text-sm text-slate-600 mt-1">
+                  Sua empresa está no plano <strong>Não-Fiscal</strong>, que não inclui emissão de notas.
+                  Para emitir NFC-e/NF-e, contrate o <strong>plano Fiscal</strong> com o suporte.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Medidor de notas do mês (plano fiscal) */}
+      {isFiscalPlan && (
+        <Card className={cn('mb-6', limitReached ? 'border-red-200 bg-red-50' : nearLimit ? 'border-orange-200 bg-orange-50' : 'border-gray-200')}>
+          <CardContent className="p-4">
+            <div className="flex items-start gap-3">
+              <Gauge className={cn('w-5 h-5 mt-0.5 flex-shrink-0', limitReached ? 'text-red-600' : nearLimit ? 'text-orange-600' : 'text-gray-500')} />
+              <div className="flex-1">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <p className="font-semibold text-gray-800">Notas emitidas neste mês</p>
+                  <span className={cn('font-bold', limitReached ? 'text-red-600' : nearLimit ? 'text-orange-600' : 'text-gray-700')}>
+                    {usedThisMonth} / {noteLimit}
+                  </span>
+                </div>
+                <div className="mt-2 h-2 bg-gray-200 rounded-full overflow-hidden">
+                  <div className={cn('h-full rounded-full', limitReached ? 'bg-red-500' : nearLimit ? 'bg-orange-500' : 'bg-green-500')}
+                    style={{ width: `${Math.min(100, (usedThisMonth / noteLimit) * 100)}%` }} />
+                </div>
+                {limitReached ? (
+                  <p className="text-sm text-red-700 mt-2">
+                    Limite do plano atingido. Notas adicionais custam <strong>R$ 2,00 cada</strong> —
+                    entre em contato com o suporte para liberar mais notas ou negociar seu plano.
+                  </p>
+                ) : nearLimit ? (
+                  <p className="text-sm text-orange-700 mt-2">
+                    Você está perto do limite mensal. Ao atingir {noteLimit}, a emissão é bloqueada
+                    (notas extras: R$ 2,00 cada, mediante contato com o suporte).
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Module status banner */}
-      {!company?.nfe_enabled && (
+      {isFiscalPlan && !company?.nfe_enabled && (
         <Card className="mb-6 border-yellow-200 bg-yellow-50">
           <CardContent className="p-4">
             <div className="flex items-start gap-3">

@@ -23,7 +23,8 @@ export default function EmitirNotaButton({ saleId, workOrderId, items, partsById
   const [loading, setLoading] = useState(false);
   const [pending, setPending] = useState(null); // { tipo, issues }
 
-  if (!company?.nfe_enabled) return null;
+  // Só aparece no plano Fiscal e com o módulo ativado
+  if (company?.plan_type !== 'fiscal' || !company?.nfe_enabled) return null;
 
   const startEmit = (tipo) => {
     const issues = fiscalIssues({ items, partsById, company });

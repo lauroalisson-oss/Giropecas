@@ -61,11 +61,36 @@ Deno.serve(async (req) => {
 
     const company = await svc.entities.Company.get(companyId);
     if (!company) return Response.json({ error: 'Empresa não encontrada.' }, { status: 404 });
+
+    // Gate por plano: só o plano Fiscal pode emitir notas
+    if (company.plan_type !== 'fiscal') {
+      return Response.json({
+        error: 'Sua empresa está no plano Não-Fiscal. Para emitir NFC-e/NF-e, contrate o plano Fiscal com o suporte.',
+        code: 'plan_non_fiscal',
+      }, { status: 403 });
+    }
     if (!company.nfe_enabled) {
       return Response.json({ error: 'Módulo fiscal desabilitado para esta empresa. Ative em Configurações → Fiscal.' }, { status: 400 });
     }
     if (!company.cnpj) {
       return Response.json({ error: 'CNPJ da empresa não configurado.' }, { status: 400 });
+    }
+
+    // Limite mensal de notas do plano (bloqueio ao atingir o teto)
+    const limit = company.fiscal_note_limit || 100;
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    const emitidasMes = (await svc.entities.NFeRecord.filter(
+      { company_id: companyId, status: 'autorizada' }, '-created_date', 500,
+    )).filter(n => (n.authorized_at || n.created_date || '') >= monthStart).length;
+    if (emitidasMes >= limit) {
+      return Response.json({
+        error: `Você atingiu o limite de ${limit} notas do seu plano neste mês. ` +
+          `Notas adicionais custam R$ 2,00 cada — entre em contato com o suporte para liberar mais notas ou negociar seu plano.`,
+        code: 'limit_reached',
+        limit,
+        count: emitidasMes,
+      }, { status: 429 });
     }
 
     let customer = null;

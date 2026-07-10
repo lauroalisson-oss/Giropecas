@@ -42,6 +42,17 @@ export function CompanyProvider({ children }) {
         if (!superAdmin && license?.id && !license.company_id) {
           try { await base44.entities.AccessKey.update(license.id, { company_id: selected.id }); } catch { /* ignore */ }
         }
+
+        // Sincroniza o plano (fiscal / não-fiscal) da empresa com o da licença ativa
+        if (!superAdmin && license?.plan_type && selected.plan_type !== license.plan_type) {
+          try {
+            const patch = { plan_type: license.plan_type };
+            if (license.plan_type === 'fiscal' && !selected.fiscal_note_limit) patch.fiscal_note_limit = 100;
+            await base44.entities.Company.update(selected.id, patch);
+            Object.assign(selected, patch);
+            setCompany({ ...selected });
+          } catch { /* ignore */ }
+        }
       } else {
         setCompany(null);
       }

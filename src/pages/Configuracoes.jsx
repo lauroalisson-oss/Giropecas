@@ -120,6 +120,7 @@ export default function Configuracoes() {
   };
 
   const set = (field, value) => setForm(prev => ({ ...prev, [field]: value }));
+  const isFiscalPlan = company?.plan_type === 'fiscal';
 
   const handleSaveCompany = async () => {
     setSaving(true);
@@ -257,6 +258,17 @@ export default function Configuracoes() {
                   </div>
                 </div>
 
+                {!isFiscalPlan && (
+                  <div className="flex items-start gap-2 p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                    <FileText className="w-5 h-5 text-slate-500 flex-shrink-0 mt-0.5" />
+                    <p className="text-sm text-slate-700">
+                      Sua empresa está no plano <strong>Não-Fiscal</strong>. A emissão de NFC-e/NF-e não está incluída.
+                      Para habilitar, contrate o <strong>plano Fiscal</strong> com o suporte.
+                    </p>
+                  </div>
+                )}
+
+                {isFiscalPlan && (
                 <div className="flex items-center gap-3 py-2">
                   <Switch checked={form.nfe_enabled || false} onCheckedChange={v => set('nfe_enabled', v)} />
                   <div>
@@ -264,8 +276,9 @@ export default function Configuracoes() {
                     <p className="text-xs text-gray-400">Ativar emissão de NFC-e (balcão) e NF-e</p>
                   </div>
                 </div>
+                )}
 
-                {form.nfe_enabled && (
+                {isFiscalPlan && form.nfe_enabled && (
                   <div className="space-y-4 p-3 bg-gray-50 rounded-lg border">
                     <div>
                       <Label>Ambiente da SEFAZ</Label>
@@ -313,7 +326,7 @@ export default function Configuracoes() {
               <Save className="w-4 h-4 mr-2" />{saving ? 'Salvando...' : 'Salvar Configurações Fiscais'}
             </Button>
 
-            {form.nfe_enabled && company?.id && (
+            {isFiscalPlan && form.nfe_enabled && company?.id && (
               <CertificadoCard company={company} setCompany={setCompany} />
             )}
           </div>

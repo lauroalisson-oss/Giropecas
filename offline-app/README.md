@@ -2,15 +2,17 @@
 
 Aplicativo **100% offline** do Giropeças. Todos os dados (clientes, peças, ordens de serviço e vendas) ficam salvos no próprio dispositivo (`localStorage`), sem depender de internet ou servidor.
 
+> **Instalador para Windows:** veja a pasta [`desktop/`](../desktop/README.md) — ela gera o `Giropecas-Setup.exe` para instalar este aplicativo em qualquer máquina via pendrive.
+
 ## Chave de acesso (licença)
 
 O aplicativo **exige uma chave de acesso** para funcionar — a mesma lógica do sistema online:
 
-- As chaves são criadas **exclusivamente pelo super-admin** (`lauro.alisson@gmail.com`) na página **Chaves de Acesso** do sistema online.
-- Formato: `GIRO-XXXX-XXXX-XXXX`. A validação é feita localmente (checksum embutido na chave), portanto **não precisa de internet** para ativar.
-- Durações disponíveis: **3, 5, 15, 30, 90 dias, 6 meses ou 1 ano** (a duração está codificada na própria chave).
-- O prazo conta a partir da **ativação no dispositivo**. Ao expirar, o app bloqueia até que uma nova chave seja informada.
-- Uma chave já utilizada e expirada **não pode ser reativada no mesmo dispositivo**.
+- As chaves são criadas **exclusivamente pelo super-admin** (`lauro.alisson@gmail.com`) na página **Admin Provedor** do sistema online, informando o nome do cliente e o período.
+- Formato: `GIRO-XXXX-XXXX-XXXX`. A validação é feita localmente (checksum e **data de vencimento embutidos na chave**), portanto **não precisa de internet** para ativar.
+- Durações disponíveis: **3, 5, 15, 30, 90 dias, 6 meses ou 1 ano**. O prazo conta a partir da **geração da chave** — o mesmo vencimento acompanhado no painel Admin Provedor.
+- Ao vencer, o app bloqueia até que uma nova chave seja informada (os dados não são perdidos).
+- Uma chave vencida ou já utilizada **não pode ser reativada no mesmo dispositivo**.
 
 ## Como usar
 

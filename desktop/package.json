@@ -1,0 +1,46 @@
+{
+  "name": "giropecas-desktop",
+  "productName": "Giropecas",
+  "version": "1.0.0",
+  "description": "Giropeças Offline — gestão de oficina e autopeças (requer chave de acesso)",
+  "author": "Giropeças",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "copy-app": "node scripts/copy-app.js",
+    "start": "npm run copy-app && electron .",
+    "dist": "npm run copy-app && electron-builder --win nsis",
+    "dist:portable": "npm run copy-app && electron-builder --win portable"
+  },
+  "devDependencies": {
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "br.com.giropecas.offline",
+    "productName": "Giropecas",
+    "publish": null,
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "app/**/*"
+    ],
+    "win": {
+      "target": ["nsis"],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Giropecas",
+      "artifactName": "Giropecas-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "Giropecas-Portatil-${version}.${ext}"
+    }
+  }
+}

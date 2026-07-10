@@ -68,14 +68,39 @@ export function normalizeKey(input) {
   return raw;
 }
 
+// A data de vencimento é embutida na chave (dias desde 01/01/2026, 3 chars
+// base-32). Assim o prazo conta a partir da GERAÇÃO da chave e vale igualmente
+// no sistema online e no aplicativo offline.
+const EPOCH_UTC = Date.UTC(2026, 0, 1);
+
+function encodeExpiry(date) {
+  const days = Math.round((Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) - EPOCH_UTC) / 86400000);
+  if (days < 0 || days > 32767) throw new Error('Data de vencimento fora do intervalo suportado.');
+  return ALPHABET[(days >> 10) & 31] + ALPHABET[(days >> 5) & 31] + ALPHABET[days & 31];
+}
+
+function decodeExpiry(chars) {
+  const i0 = ALPHABET.indexOf(chars[0]);
+  const i1 = ALPHABET.indexOf(chars[1]);
+  const i2 = ALPHABET.indexOf(chars[2]);
+  if (i0 < 0 || i1 < 0 || i2 < 0) return null;
+  const days = (i0 << 10) | (i1 << 5) | i2;
+  const utc = new Date(EPOCH_UTC + days * 86400000);
+  // Vence no fim do dia, no fuso local
+  return new Date(utc.getUTCFullYear(), utc.getUTCMonth(), utc.getUTCDate(), 23, 59, 59, 999);
+}
+
+// Retorna { key, expiresAt } — vencimento = hoje + durationDays
 export function generateKey(durationDays) {
   const opt = DURATION_OPTIONS.find(o => o.days === Number(durationDays));
   if (!opt) throw new Error(`Duração inválida: ${durationDays}`);
-  const body = `GIRO-${opt.code}${randomChars(3)}-${randomChars(4)}`;
-  return `${body}-${checksum(body)}`;
+  const now = new Date();
+  const expiresAt = new Date(now.getFullYear(), now.getMonth(), now.getDate() + opt.days, 23, 59, 59, 999);
+  const body = `GIRO-${opt.code}${encodeExpiry(expiresAt)}-${randomChars(4)}`;
+  return { key: `${body}-${checksum(body)}`, expiresAt };
 }
 
-// Retorna { valid, durationDays, reason }
+// Retorna { valid, key, durationDays, expiresAt, reason }
 export function validateKeyFormat(input) {
   const key = normalizeKey(input);
   const m = key.match(/^GIRO-([A-Z2-9]{4})-([A-Z2-9]{4})-([A-Z2-9]{4})$/);
@@ -84,13 +109,9 @@ export function validateKeyFormat(input) {
   if (checksum(body) !== m[3]) return { valid: false, reason: 'Chave inválida.' };
   const opt = DURATION_OPTIONS.find(o => o.code === m[1][0]);
   if (!opt) return { valid: false, reason: 'Chave inválida.' };
-  return { valid: true, key, durationDays: opt.days };
-}
-
-export function computeExpiry(activatedAt, durationDays) {
-  const d = new Date(activatedAt);
-  d.setDate(d.getDate() + Number(durationDays));
-  return d;
+  const expiresAt = decodeExpiry(m[1].slice(1));
+  if (!expiresAt) return { valid: false, reason: 'Chave inválida.' };
+  return { valid: true, key, durationDays: opt.days, expiresAt };
 }
 
 export function isExpired(expiresAt) {
@@ -98,8 +119,9 @@ export function isExpired(expiresAt) {
   return new Date(expiresAt).getTime() <= Date.now();
 }
 
+// Diferença em dias de calendário (0 = vence hoje)
 export function daysRemaining(expiresAt) {
   if (!expiresAt) return 0;
   const ms = new Date(expiresAt).getTime() - Date.now();
-  return Math.max(0, Math.ceil(ms / (24 * 60 * 60 * 1000)));
+  return Math.max(0, Math.floor(ms / (24 * 60 * 60 * 1000)));
 }

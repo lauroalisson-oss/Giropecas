@@ -19,6 +19,14 @@
       ],
       "default": "available"
     },
+    "client_name": {
+      "type": "string",
+      "description": "Nome da loja/cliente para quem a chave foi gerada"
+    },
+    "client_email": {
+      "type": "string",
+      "description": "Email do cliente (opcional)"
+    },
     "activated_by": {
       "type": "string",
       "description": "Email do usuário que ativou a chave"

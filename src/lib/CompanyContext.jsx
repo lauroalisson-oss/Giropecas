@@ -53,6 +53,9 @@ export function CompanyProvider({ children }) {
             if (selected.fiscal_note_limit !== limiteLicenca) patch.fiscal_note_limit = limiteLicenca;
             // Módulo fiscal habilitado por concessão do super-admin
             if (selected.nfe_enabled !== true) patch.nfe_enabled = true;
+          } else if (selected.nfe_enabled) {
+            // Downgrade para Não-Fiscal: desliga o módulo
+            patch.nfe_enabled = false;
           }
           if (Object.keys(patch).length) {
             try {

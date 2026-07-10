@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils';
 import {
-  ShieldCheck, KeyRound, Plus, Copy, Trash2, Loader2, Mail, Calendar, Store, User, Ban,
+  ShieldCheck, KeyRound, Plus, Copy, Trash2, Loader2, Mail, Calendar, Store, User, Ban, Pencil,
 } from 'lucide-react';
 
 export default function AdminChaves() {
@@ -264,8 +264,8 @@ export default function AdminChaves() {
                         <span className="flex items-center gap-1"><User className="w-3 h-3" />Ativada por: {k.activated_by}</span>
                       )}
                     </div>
-                    {k.plan_type === 'fiscal' && k.company_id && (
-                      <NoteLimitControl companyId={k.company_id} toast={toast} />
+                    {!isDead(k) && (
+                      <LicenseManageControl licenseKey={k} toast={toast} onSaved={loadKeys} />
                     )}
                   </div>
                   <div className="flex items-center flex-shrink-0">
@@ -291,40 +291,79 @@ export default function AdminChaves() {
   );
 }
 
-// Controle do limite mensal de notas de uma empresa fiscal (usado pelo suporte
-// para "negociar" mais notas quando o cliente estoura o teto do plano).
-function NoteLimitControl({ companyId, toast }) {
-  const [limit, setLimit] = useState('');
-  const [loaded, setLoaded] = useState(false);
+// Gerenciamento da empresa por licença: o super-admin pode, a qualquer momento,
+// alternar o plano (Fiscal / Não-Fiscal) e ajustar o limite de notas/mês.
+// A alteração vale na chave e também na empresa já vinculada (efeito imediato).
+function LicenseManageControl({ licenseKey, toast, onSaved }) {
+  const k = licenseKey;
+  const [open, setOpen] = useState(false);
+  const [plan, setPlan] = useState(k.plan_type || 'non_fiscal');
+  const [limit, setLimit] = useState(String(k.fiscal_note_limit ?? 100));
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    let active = true;
-    base44.entities.Company.get(companyId)
-      .then(c => { if (active) { setLimit(String(c?.fiscal_note_limit ?? 100)); setLoaded(true); } })
-      .catch(() => { if (active) { setLimit('100'); setLoaded(true); } });
-    return () => { active = false; };
-  }, [companyId]);
+  const dirty = plan !== (k.plan_type || 'non_fiscal') ||
+    (plan === 'fiscal' && Number(limit) !== Number(k.fiscal_note_limit ?? 100));
 
   const save = async () => {
-    const value = Math.max(0, parseInt(limit, 10) || 0);
     setSaving(true);
     try {
-      await base44.entities.Company.update(companyId, { fiscal_note_limit: value });
-      toast({ title: 'Limite atualizado', description: `${value} notas/mês liberadas para esta empresa.` });
+      const noteLimit = Math.max(0, parseInt(limit, 10) || 0);
+      // 1) Atualiza a chave (fonte da permissão)
+      await base44.entities.AccessKey.update(k.id, {
+        plan_type: plan,
+        fiscal_note_limit: plan === 'fiscal' ? noteLimit : undefined,
+      });
+      // 2) Se a empresa já ativou a chave, aplica na empresa (efeito imediato)
+      if (k.company_id) {
+        const patch = { plan_type: plan };
+        if (plan === 'fiscal') { patch.fiscal_note_limit = noteLimit; patch.nfe_enabled = true; }
+        else { patch.nfe_enabled = false; }
+        try { await base44.entities.Company.update(k.company_id, patch); } catch { /* empresa pode não existir ainda */ }
+      }
+      toast({ title: 'Licença atualizada', description: plan === 'fiscal' ? `Plano Fiscal • ${noteLimit} notas/mês.` : 'Plano Não-Fiscal.' });
+      setOpen(false);
+      onSaved?.();
     } catch (e) {
-      toast({ title: 'Erro ao atualizar limite', description: e.message, variant: 'destructive' });
+      toast({ title: 'Erro ao atualizar', description: e.message, variant: 'destructive' });
     } finally {
       setSaving(false);
     }
   };
 
-  if (!loaded) return null;
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)} className="mt-2 inline-flex items-center gap-1 text-xs text-red-600 hover:text-red-800">
+        <Pencil className="w-3 h-3" />Gerenciar plano e limite
+      </button>
+    );
+  }
+
   return (
-    <div className="flex items-center gap-2 mt-2">
-      <span className="text-xs text-gray-500">Limite de notas/mês:</span>
-      <Input type="number" min="0" value={limit} onChange={e => setLimit(e.target.value)} className="h-7 w-24 text-xs" />
-      <Button size="sm" variant="outline" className="h-7 text-xs" disabled={saving} onClick={save}>Salvar</Button>
+    <div className="mt-2 p-3 bg-white border border-gray-200 rounded-lg flex flex-wrap items-end gap-3">
+      <div className="space-y-1">
+        <Label className="text-xs">Plano</Label>
+        <Select value={plan} onValueChange={setPlan}>
+          <SelectTrigger className="h-8 w-40 text-xs"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="non_fiscal">Não-Fiscal</SelectItem>
+            <SelectItem value="fiscal">Fiscal</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      {plan === 'fiscal' && (
+        <div className="space-y-1">
+          <Label className="text-xs">Limite de notas/mês</Label>
+          <Input type="number" min="0" value={limit} onChange={e => setLimit(e.target.value)} className="h-8 w-28 text-xs" />
+        </div>
+      )}
+      <div className="flex items-center gap-2">
+        <Button size="sm" className="h-8 text-xs bg-red-600 hover:bg-red-700 text-white" disabled={saving || !dirty} onClick={save}>
+          {saving ? 'Salvando...' : 'Salvar'}
+        </Button>
+        <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => { setOpen(false); setPlan(k.plan_type || 'non_fiscal'); setLimit(String(k.fiscal_note_limit ?? 100)); }}>
+          Cancelar
+        </Button>
+      </div>
     </div>
   );
 }

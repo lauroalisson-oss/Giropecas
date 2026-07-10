@@ -85,8 +85,14 @@ export function LicenseProvider({ children }) {
     return updated;
   }, [user]);
 
+  // Plano e limite vêm da LICENÇA ativa (fonte da verdade do período).
+  // Super-admin (provedor) tem acesso total.
+  const planType = superAdmin ? 'fiscal' : (license?.plan_type || 'non_fiscal');
+  const noteLimit = superAdmin ? Infinity : (license?.fiscal_note_limit || 100);
+  const isFiscal = planType === 'fiscal';
+
   return (
-    <LicenseContext.Provider value={{ status, license, superAdmin, activateKey, refresh }}>
+    <LicenseContext.Provider value={{ status, license, superAdmin, planType, noteLimit, isFiscal, activateKey, refresh }}>
       {children}
     </LicenseContext.Provider>
   );

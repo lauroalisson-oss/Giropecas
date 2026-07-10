@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useCompany } from '@/lib/CompanyContext';
+import { useLicense } from '@/lib/LicenseContext';
 import { formatCurrency, formatDateTime } from '@/lib/formatters';
 import { consultarNota, notesThisMonth, NFE_STATUS_LABEL, NFE_STATUS_COLOR } from '@/lib/fiscal';
 import { Button } from '@/components/ui/button';
@@ -12,6 +13,7 @@ import { cn } from '@/lib/utils';
 
 export default function NFe() {
   const { company } = useCompany();
+  const { isFiscal, noteLimit: planNoteLimit } = useLicense();
   const { toast } = useToast();
   const [nfes, setNfes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -42,8 +44,8 @@ export default function NFe() {
   const nfeStatusColor = (status) => NFE_STATUS_COLOR[status] || 'bg-gray-100 text-gray-700';
   const nfeStatusLabel = (status) => NFE_STATUS_LABEL[status] || status;
 
-  const isFiscalPlan = company?.plan_type === 'fiscal';
-  const noteLimit = company?.fiscal_note_limit || 100;
+  const isFiscalPlan = isFiscal;
+  const noteLimit = Number.isFinite(planNoteLimit) ? planNoteLimit : (company?.fiscal_note_limit || 100);
   const usedThisMonth = notesThisMonth(nfes);
   const limitReached = usedThisMonth >= noteLimit;
   const nearLimit = usedThisMonth >= noteLimit * 0.9;

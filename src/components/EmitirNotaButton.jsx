@@ -9,6 +9,7 @@ import {
 import { FileText, Loader2, ChevronDown, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { useCompany } from '@/lib/CompanyContext';
+import { useLicense } from '@/lib/LicenseContext';
 import { emitirNota, fiscalIssues, NFE_STATUS_LABEL } from '@/lib/fiscal';
 
 // Botão de emissão fiscal reutilizável, com verificação prévia de cadastro.
@@ -19,12 +20,13 @@ import { emitirNota, fiscalIssues, NFE_STATUS_LABEL } from '@/lib/fiscal';
 //   size, onEmitted
 export default function EmitirNotaButton({ saleId, workOrderId, items, partsById, size = 'sm', onEmitted }) {
   const { company } = useCompany();
+  const { isFiscal } = useLicense();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [pending, setPending] = useState(null); // { tipo, issues }
 
-  // Só aparece no plano Fiscal e com o módulo ativado
-  if (company?.plan_type !== 'fiscal' || !company?.nfe_enabled) return null;
+  // Só aparece quando a licença ativa é do plano Fiscal
+  if (!isFiscal) return null;
 
   const startEmit = (tipo) => {
     const issues = fiscalIssues({ items, partsById, company });

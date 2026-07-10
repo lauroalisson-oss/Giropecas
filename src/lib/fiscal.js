@@ -29,6 +29,31 @@ export async function cancelarNota(nfeId, justificativa) {
   return data;
 }
 
+// Verifica se há pendências que podem fazer a nota ser rejeitada.
+// Retorna uma lista de mensagens (vazia = tudo pronto).
+// items: itens da venda/OS; partsById: mapa id -> Part (com ncm); company: empresa.
+export function fiscalIssues({ items, partsById, company }) {
+  const issues = [];
+  if (!company?.cnpj) issues.push('CNPJ da empresa não está preenchido (Configurações → Empresa).');
+  if (!company?.tax_regime) issues.push('Regime tributário não definido (Configurações → Fiscal).');
+
+  const partItems = (items || []).filter(i => !i.type || i.type === 'part');
+  if (partItems.length === 0) {
+    issues.push('A venda não tem peças. Serviços/mão de obra exigem NFS-e (prefeitura).');
+    return issues;
+  }
+  const semNcm = [];
+  for (const it of partItems) {
+    const pid = it.id || it.part_id;
+    const part = pid ? partsById?.[pid] : null;
+    if (!part || !part.ncm) semNcm.push(it.description || 'peça');
+  }
+  if (semNcm.length) {
+    issues.push(`Peça(s) sem NCM cadastrado: ${semNcm.join(', ')}. Preencha o NCM no cadastro da peça.`);
+  }
+  return issues;
+}
+
 export const NFE_STATUS_LABEL = {
   rascunho: 'Rascunho',
   validando: 'Validando',

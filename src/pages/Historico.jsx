@@ -147,7 +147,7 @@ export default function Historico() {
       const qPlate = normPlate(search);
       const matchName = customerMap[o.customer_id]?.name?.toLowerCase().includes(s);
       const matchNumber = o.order_number?.toLowerCase().includes(s);
-      const matchPlate = qPlate && normPlate(vehicleMap[o.vehicle_id]?.plate).includes(qPlate);
+      const matchPlate = qPlate && normPlate(o.plate || vehicleMap[o.vehicle_id]?.plate).includes(qPlate);
       if (!matchName && !matchNumber && !matchPlate) return false;
     }
     return true;
@@ -259,7 +259,7 @@ export default function Historico() {
   const exportOrders = filteredOrders.map(o => ({
     numero: o.order_number, data: formatDate(o.created_date),
     cliente: customerMap[o.customer_id]?.name || '-',
-    placa: vehicleMap[o.vehicle_id]?.plate || '-',
+    placa: o.plate || vehicleMap[o.vehicle_id]?.plate || '-',
     status: STATUS_LABELS[o.status] || o.status,
     total: o.total || 0,
     servicos: (o.service_items || []).map(si => si.description || serviceMap[si.service_id] || si.service_id).join('; '),
@@ -408,8 +408,8 @@ export default function Historico() {
                           </div>
                           <p className="text-xs text-gray-500 mt-0.5 flex items-center gap-2 flex-wrap">
                             <span>{customerMap[order.customer_id]?.name || 'Cliente não informado'} • {formatDate(order.created_date)}</span>
-                            {vehicleMap[order.vehicle_id]?.plate && (
-                              <span className="font-mono uppercase bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">{vehicleMap[order.vehicle_id].plate}</span>
+                            {(order.plate || vehicleMap[order.vehicle_id]?.plate) && (
+                              <span className="font-mono uppercase bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">{order.plate || vehicleMap[order.vehicle_id].plate}</span>
                             )}
                           </p>
                           {(order.service_items || []).length > 0 && (

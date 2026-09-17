@@ -62,10 +62,11 @@ export default function Ordens() {
   const filtered = orders.filter(o => {
     const customer = customers[o.customer_id];
     const vehicle = vehicles[o.vehicle_id];
+    const plate = o.plate || vehicle?.plate;
     const matchSearch = !q ||
       o.order_number?.includes(search) ||
       customer?.name?.toLowerCase().includes(q) ||
-      (qPlate && normPlate(vehicle?.plate).includes(qPlate));
+      (qPlate && normPlate(plate).includes(qPlate));
     const matchStatus = statusFilter === 'all' || o.status === statusFilter;
     return matchSearch && matchStatus;
   });
@@ -108,6 +109,7 @@ export default function Ordens() {
             {filtered.map(order => {
               const customer = customers[order.customer_id];
               const vehicle = vehicles[order.vehicle_id];
+              const plate = order.plate || vehicle?.plate;
               return (
                 <Card key={order.id} className="cursor-pointer hover:shadow-sm transition-shadow"
                   onClick={() => navigate(`/ordens/${order.id}`)}>
@@ -121,8 +123,8 @@ export default function Ordens() {
                         <p className="text-sm text-gray-700 font-medium">{customer?.name || 'Cliente não encontrado'}</p>
                         <p className="text-xs text-gray-400 flex items-center gap-2 flex-wrap mt-0.5">
                           <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{formatDate(order.opened_at || order.created_date)}</span>
-                          {vehicle?.plate && (
-                            <span className="font-mono uppercase bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">{vehicle.plate}</span>
+                          {plate && (
+                            <span className="font-mono uppercase bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">{plate}</span>
                           )}
                         </p>
                       </div>

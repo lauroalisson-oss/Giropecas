@@ -13,6 +13,10 @@
     "vehicle_id": {
       "type": "string"
     },
+    "plate": {
+      "type": "string",
+      "description": "Placa do veículo da OS (permite busca por placa mesmo sem veículo cadastrado)"
+    },
     "mechanic_id": {
       "type": "string"
     },

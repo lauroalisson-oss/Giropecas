@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Save, Plus, Trash2, Search, Package, Wrench } from 'lucide-react';
+import { ArrowLeft, Save, Trash2, Search, Package, Wrench } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 
 export default function OrdemForm() {
@@ -31,6 +31,7 @@ export default function OrdemForm() {
   const [form, setForm] = useState({
     customer_id: presetCustomerId || '',
     vehicle_id: '',
+    plate: '',
     mechanic_id: '',
     complaint: '',
     diagnosis: '',
@@ -69,7 +70,13 @@ export default function OrdemForm() {
   const loadVehicles = async (customerId) => {
     const data = await base44.entities.Vehicle.filter({ customer_id: customerId });
     setVehicles(data);
-    if (data.length === 1) setForm(prev => ({ ...prev, vehicle_id: data[0].id }));
+    if (data.length === 1) setForm(prev => ({ ...prev, vehicle_id: data[0].id, plate: prev.plate || data[0].plate || '' }));
+  };
+
+  // Ao escolher um veículo, preenche a placa automaticamente (mantém editável)
+  const selectVehicle = (vehicleId) => {
+    const v = vehicles.find(x => x.id === vehicleId);
+    setForm(prev => ({ ...prev, vehicle_id: vehicleId, plate: v?.plate || prev.plate || '' }));
   };
 
   const set = (field, value) => setForm(prev => ({ ...prev, [field]: value }));
@@ -183,7 +190,7 @@ export default function OrdemForm() {
             {vehicles.length > 0 && (
               <div>
                 <Label>Veículo</Label>
-                <Select value={form.vehicle_id} onValueChange={v => set('vehicle_id', v)}>
+                <Select value={form.vehicle_id} onValueChange={selectVehicle}>
                   <SelectTrigger className="mt-1"><SelectValue placeholder="Selecione o veículo" /></SelectTrigger>
                   <SelectContent>
                     {vehicles.map(v => <SelectItem key={v.id} value={v.id}>{v.brand} {v.model} - {v.plate}</SelectItem>)}
@@ -191,6 +198,12 @@ export default function OrdemForm() {
                 </Select>
               </div>
             )}
+            <div>
+              <Label>Placa do veículo</Label>
+              <Input className="mt-1" value={form.plate} onChange={e => set('plate', e.target.value.toUpperCase())}
+                placeholder="ABC-1234" />
+              <p className="text-xs text-gray-400 mt-1">Preenchida ao escolher o veículo. Permite localizar a OS pela placa.</p>
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>KM atual</Label>

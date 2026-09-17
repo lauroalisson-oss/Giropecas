@@ -57,6 +57,7 @@ export default function Historico() {
   const [orders, setOrders] = useState([]);
   const [sales, setSales] = useState([]);
   const [customers, setCustomers] = useState([]);
+  const [vehicles, setVehicles] = useState([]);
   const [services, setServices] = useState([]);
   const [parts, setParts] = useState([]);
   const [technicians, setTechnicians] = useState([]);
@@ -82,7 +83,7 @@ export default function Historico() {
 
   const loadData = async () => {
     setLoading(true);
-    const [ord, sal, custs, svcs, pts, techs, notas] = await Promise.all([
+    const [ord, sal, custs, svcs, pts, techs, notas, vehs] = await Promise.all([
       base44.entities.WorkOrder.filter({ company_id: company.id }, '-created_date', 200),
       base44.entities.Sale.filter({ company_id: company.id }, '-created_date', 200),
       base44.entities.Customer.filter({ company_id: company.id }),
@@ -90,10 +91,12 @@ export default function Historico() {
       base44.entities.Part.filter({ company_id: company.id }),
       base44.entities.Technician.filter({ company_id: company.id }),
       base44.entities.NFeRecord.filter({ company_id: company.id }, '-created_date', 300).catch(() => []),
+      base44.entities.Vehicle.filter({ company_id: company.id }).catch(() => []),
     ]);
     setOrders(ord);
     setSales(sal);
     setCustomers(custs);
+    setVehicles(vehs);
     setServices(svcs);
     setParts(pts);
     setTechnicians(techs);
@@ -102,6 +105,9 @@ export default function Historico() {
   };
 
   const customerMap = Object.fromEntries(customers.map(c => [c.id, c]));
+  const vehicleMap = Object.fromEntries(vehicles.map(v => [v.id, v]));
+  // Normaliza placa: ignora maiúsculas, hífen e espaços (ABC-1234 = abc1234)
+  const normPlate = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
   const serviceMap = Object.fromEntries(services.map(s => [s.id, s.name]));
   const partMap = Object.fromEntries(parts.map(p => [p.id, { description: p.description, stock: p.stock_quantity }]));
   const technicianMap = Object.fromEntries(technicians.map(t => [t.id, t]));
@@ -138,7 +144,11 @@ export default function Historico() {
     }
     if (search) {
       const s = search.toLowerCase();
-      if (!customerMap[o.customer_id]?.name?.toLowerCase().includes(s) && !o.order_number?.toLowerCase().includes(s)) return false;
+      const qPlate = normPlate(search);
+      const matchName = customerMap[o.customer_id]?.name?.toLowerCase().includes(s);
+      const matchNumber = o.order_number?.toLowerCase().includes(s);
+      const matchPlate = qPlate && normPlate(vehicleMap[o.vehicle_id]?.plate).includes(qPlate);
+      if (!matchName && !matchNumber && !matchPlate) return false;
     }
     return true;
   });
@@ -248,7 +258,9 @@ export default function Historico() {
 
   const exportOrders = filteredOrders.map(o => ({
     numero: o.order_number, data: formatDate(o.created_date),
-    cliente: customerMap[o.customer_id]?.name || '-', status: STATUS_LABELS[o.status] || o.status,
+    cliente: customerMap[o.customer_id]?.name || '-',
+    placa: vehicleMap[o.vehicle_id]?.plate || '-',
+    status: STATUS_LABELS[o.status] || o.status,
     total: o.total || 0,
     servicos: (o.service_items || []).map(si => si.description || serviceMap[si.service_id] || si.service_id).join('; '),
     pecas: (o.parts_items || []).map(pi => pi.description || partMap[pi.part_id]?.description || pi.part_id).join('; '),
@@ -275,7 +287,7 @@ export default function Historico() {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <div className="col-span-2 relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <Input placeholder="Buscar por cliente, nº OS ou venda..." value={search}
+              <Input placeholder="Buscar por cliente, nº OS/venda ou placa..." value={search}
                 onChange={e => setSearch(e.target.value)} className="pl-9" />
             </div>
             <div>
@@ -394,8 +406,11 @@ export default function Historico() {
                               {STATUS_LABELS[order.status] || order.status}
                             </Badge>
                           </div>
-                          <p className="text-xs text-gray-500 mt-0.5">
-                            {customerMap[order.customer_id]?.name || 'Cliente não informado'} • {formatDate(order.created_date)}
+                          <p className="text-xs text-gray-500 mt-0.5 flex items-center gap-2 flex-wrap">
+                            <span>{customerMap[order.customer_id]?.name || 'Cliente não informado'} • {formatDate(order.created_date)}</span>
+                            {vehicleMap[order.vehicle_id]?.plate && (
+                              <span className="font-mono uppercase bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">{vehicleMap[order.vehicle_id].plate}</span>
+                            )}
                           </p>
                           {(order.service_items || []).length > 0 && (
                             <div className="mt-1.5 flex flex-wrap gap-1">

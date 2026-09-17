@@ -25,6 +25,7 @@ export default function Ordens() {
   const navigate = useNavigate();
   const [orders, setOrders] = useState([]);
   const [customers, setCustomers] = useState({});
+  const [vehicles, setVehicles] = useState({});
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [loading, setLoading] = useState(true);
@@ -36,23 +37,35 @@ export default function Ordens() {
   const loadOrders = async () => {
     setLoading(true);
     try {
-      const [ords, custs] = await Promise.all([
+      const [ords, custs, vehs] = await Promise.all([
         base44.entities.WorkOrder.filter({ company_id: company.id }, '-created_date'),
-        base44.entities.Customer.filter({ company_id: company.id })
+        base44.entities.Customer.filter({ company_id: company.id }),
+        base44.entities.Vehicle.filter({ company_id: company.id })
       ]);
       setOrders(ords);
       const map = {};
       custs.forEach(c => { map[c.id] = c; });
       setCustomers(map);
+      const vmap = {};
+      vehs.forEach(v => { vmap[v.id] = v; });
+      setVehicles(vmap);
     } finally {
       setLoading(false);
     }
   };
 
+  // Normaliza placa: ignora maiúsculas, hífen e espaços (ABC-1234 = abc1234)
+  const normPlate = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const q = search.trim().toLowerCase();
+  const qPlate = normPlate(search);
+
   const filtered = orders.filter(o => {
     const customer = customers[o.customer_id];
-    const matchSearch = o.order_number?.includes(search) ||
-      customer?.name?.toLowerCase().includes(search.toLowerCase());
+    const vehicle = vehicles[o.vehicle_id];
+    const matchSearch = !q ||
+      o.order_number?.includes(search) ||
+      customer?.name?.toLowerCase().includes(q) ||
+      (qPlate && normPlate(vehicle?.plate).includes(qPlate));
     const matchStatus = statusFilter === 'all' || o.status === statusFilter;
     return matchSearch && matchStatus;
   });
@@ -72,7 +85,7 @@ export default function Ordens() {
       <div className="flex gap-3 mb-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <Input placeholder="Buscar por número, cliente..." value={search}
+          <Input placeholder="Buscar por número, cliente ou placa..." value={search}
             onChange={e => setSearch(e.target.value)} className="pl-10" />
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -94,6 +107,7 @@ export default function Ordens() {
           <div className="space-y-2">
             {filtered.map(order => {
               const customer = customers[order.customer_id];
+              const vehicle = vehicles[order.vehicle_id];
               return (
                 <Card key={order.id} className="cursor-pointer hover:shadow-sm transition-shadow"
                   onClick={() => navigate(`/ordens/${order.id}`)}>
@@ -105,8 +119,11 @@ export default function Ordens() {
                           <Badge className={`text-xs ${getStatusColor(order.status)}`}>{getStatusLabel(order.status)}</Badge>
                         </div>
                         <p className="text-sm text-gray-700 font-medium">{customer?.name || 'Cliente não encontrado'}</p>
-                        <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5">
-                          <Calendar className="w-3 h-3" />{formatDate(order.opened_at || order.created_date)}
+                        <p className="text-xs text-gray-400 flex items-center gap-2 flex-wrap mt-0.5">
+                          <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{formatDate(order.opened_at || order.created_date)}</span>
+                          {vehicle?.plate && (
+                            <span className="font-mono uppercase bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">{vehicle.plate}</span>
+                          )}
                         </p>
                       </div>
                       <div className="text-right flex-shrink-0">

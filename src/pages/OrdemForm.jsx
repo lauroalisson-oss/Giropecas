@@ -10,8 +10,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Save, Trash2, Search, Package, Wrench } from 'lucide-react';
+import { ArrowLeft, Save, Trash2, Search, Package, Wrench, UserPlus } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import QuickCustomerModal from '@/components/QuickCustomerModal';
 
 export default function OrdemForm() {
   const navigate = useNavigate();
@@ -45,6 +46,7 @@ export default function OrdemForm() {
   const [partSearch, setPartSearch] = useState('');
   const [serviceSearch, setServiceSearch] = useState('');
   const [saving, setSaving] = useState(false);
+  const [showCustomerModal, setShowCustomerModal] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -180,12 +182,17 @@ export default function OrdemForm() {
           <CardContent className="space-y-4">
             <div>
               <Label>Cliente *</Label>
-              <Select value={form.customer_id} onValueChange={v => set('customer_id', v)}>
-                <SelectTrigger className="mt-1"><SelectValue placeholder="Selecione o cliente" /></SelectTrigger>
-                <SelectContent>
-                  {customers.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <div className="flex gap-2 mt-1">
+                <Select value={form.customer_id} onValueChange={v => set('customer_id', v)}>
+                  <SelectTrigger><SelectValue placeholder="Selecione o cliente" /></SelectTrigger>
+                  <SelectContent>
+                    {customers.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Button type="button" variant="outline" onClick={() => setShowCustomerModal(true)} className="shrink-0 border-red-200 text-red-600 hover:bg-red-50">
+                  <UserPlus className="w-4 h-4" />
+                </Button>
+              </div>
             </div>
             {vehicles.length > 0 && (
               <div>
@@ -369,6 +376,15 @@ export default function OrdemForm() {
           </Button>
         </div>
       </div>
+
+      <QuickCustomerModal
+        open={showCustomerModal}
+        onOpenChange={setShowCustomerModal}
+        onCreated={(c) => {
+          setCustomers(prev => [...prev, c]);
+          set('customer_id', c.id);
+        }}
+      />
     </div>
   );
 }

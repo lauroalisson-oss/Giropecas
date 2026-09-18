@@ -27,14 +27,19 @@ Deno.serve(async (req) => {
     if (!sale_id && !work_order_id) {
       return Response.json({ error: 'Informe sale_id ou work_order_id.' }, { status: 400 });
     }
-    if (tipo !== 'nfce' && tipo !== 'nfe') {
-      return Response.json({ error: 'tipo deve ser "nfce" ou "nfe".' }, { status: 400 });
+    if (tipo !== 'nfce' && tipo !== 'nfe' && tipo !== 'nfse') {
+      return Response.json({ error: 'tipo deve ser "nfce", "nfe" ou "nfse".' }, { status: 400 });
+    }
+    // NFS-e é nota de serviço (mão de obra), que só existe em OS
+    if (tipo === 'nfse' && !work_order_id) {
+      return Response.json({ error: 'NFS-e exige work_order_id (a nota de serviço sai da OS).' }, { status: 400 });
     }
 
     const svc = base44.asServiceRole;
 
     // Carrega a origem (venda ou OS) e normaliza itens/total/pagamento
     let companyId, customerId, saleItems, total, pagamento, origem;
+    let serviceItems = [];
     if (sale_id) {
       const sale = await svc.entities.Sale.get(sale_id);
       if (!sale) return Response.json({ error: 'Venda não encontrada.' }, { status: 404 });
@@ -49,12 +54,14 @@ Deno.serve(async (req) => {
       if (!wo) return Response.json({ error: 'Ordem de serviço não encontrada.' }, { status: 404 });
       companyId = wo.company_id;
       customerId = wo.customer_id;
-      // Na OS, só as peças entram na nota fiscal de mercadoria
+      // Na OS, as peças vão na nota de mercadoria (NF-e/NFC-e) e a mão de obra
+      // na nota de serviço (NFS-e) — são documentos e fiscos diferentes.
       saleItems = (wo.parts_items || []).map(p => ({
         type: 'part', id: p.part_id, description: p.description,
         quantity: p.quantity, unit_price: p.unit_price, total_price: p.total_price,
       }));
-      total = wo.parts_total;
+      serviceItems = wo.service_items || [];
+      total = tipo === 'nfse' ? wo.services_total : wo.parts_total;
       pagamento = 'dinheiro';
       origem = { entity: 'WorkOrder', id: wo.id };
     }

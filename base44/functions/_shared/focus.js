@@ -165,6 +165,80 @@ export function buildItens(saleItems, partsById, taxRegime) {
 
 const onlyDigits = (s) => String(s || '').replace(/\D/g, '');
 
+// Agrega os serviços da OS numa única NFS-e: o RPS do Focus tem UM bloco
+// "servico", então a discriminação lista cada linha de mão de obra e o valor
+// é a soma. Os códigos fiscais vêm do primeiro serviço que os tiver, caindo
+// no padrão da empresa quando o serviço não define.
+export function buildServicoNFSe(serviceItems, servicesById, company) {
+  const linhas = [];
+  let totalServicos = 0;
+  let lc116 = '';
+  let codMunicipio = '';
+  let aliquota = null;
+  let issRetido = false;
+
+  for (const it of serviceItems || []) {
+    const svc = it.service_id ? servicesById[it.service_id] : null;
+    const valor = Number(it.total_price) || 0;
+    totalServicos += valor;
+    const desc = it.description || (svc && svc.name) || 'Serviço';
+    const qtd = Number(it.hours) || 1;
+    linhas.push(`${desc} - ${qtd}h - R$ ${valor.toFixed(2)}`);
+
+    if (svc) {
+      if (!lc116 && svc.service_code_lc116) lc116 = svc.service_code_lc116;
+      if (!codMunicipio && svc.municipal_service_code) codMunicipio = svc.municipal_service_code;
+      if (aliquota == null && Number(svc.iss_rate) > 0) aliquota = Number(svc.iss_rate);
+      if (svc.iss_retido) issRetido = true;
+    }
+  }
+
+  if (aliquota == null) aliquota = Number(company.iss_rate) || 0;
+  if (!lc116) lc116 = '14.01'; // oficina: conserto e manutenção de veículos
+
+  return {
+    // Alguns municípios esperam o item sem ponto (1401); normalizamos para dígitos.
+    item_lista_servico: onlyDigits(lc116),
+    ...(codMunicipio ? { codigo_tributario_municipio: codMunicipio } : {}),
+    discriminacao: linhas.join(' | ') || 'Serviços prestados',
+    valor_servicos: +totalServicos.toFixed(2),
+    aliquota,
+    iss_retido: issRetido,
+  };
+}
+
+// Monta o corpo da NFS-e (nota de serviço municipal — ISS).
+// Diferente da NF-e/NFC-e: quem recebe é a prefeitura, não a SEFAZ.
+export function buildNFSePayload({ company, customer, servico }) {
+  const doc = customer && onlyDigits(customer.tax_id);
+  const isCnpj = doc && doc.length === 14;
+
+  return {
+    data_emissao: new Date().toISOString(),
+    prestador: {
+      cnpj: onlyDigits(company.cnpj),
+      inscricao_municipal: company.im || '',
+      codigo_municipio: onlyDigits(company.city_ibge_code),
+    },
+    ...(doc ? {
+      tomador: {
+        ...(isCnpj ? { cnpj: doc } : { cpf: doc }),
+        razao_social: (customer && customer.name) || 'Consumidor',
+        ...(customer && customer.email ? { email: customer.email } : {}),
+        ...(customer && customer.address ? {
+          endereco: {
+            logradouro: customer.address,
+            ...(customer.city ? { municipio: customer.city } : {}),
+            ...(customer.state ? { uf: customer.state } : {}),
+            ...(customer.zip_code ? { cep: onlyDigits(customer.zip_code) } : {}),
+          },
+        } : {}),
+      },
+    } : {}),
+    servico,
+  };
+}
+
 // Monta o corpo da NFC-e (modelo 65) — venda ao consumidor no balcão.
 export function buildNFCePayload({ company, customer, items, total, pagamento }) {
   const cpf = customer && onlyDigits(customer.tax_id);

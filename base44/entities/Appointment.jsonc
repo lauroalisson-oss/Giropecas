@@ -1,0 +1,76 @@
+{
+  "type": "object",
+  "properties": {
+    "company_id": {
+      "type": "string"
+    },
+    "customer_id": {
+      "type": "string"
+    },
+    "vehicle_id": {
+      "type": "string"
+    },
+    "mechanic_id": {
+      "type": "string",
+      "description": "T\u00e9cnico respons\u00e1vel"
+    },
+    "scheduled_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "scheduled_time": {
+      "type": "string",
+      "description": "HH:MM"
+    },
+    "duration_hours": {
+      "type": "number",
+      "default": 1
+    },
+    "service_description": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "agendado",
+        "confirmado",
+        "em_andamento",
+        "concluido",
+        "cancelado",
+        "no_show"
+      ],
+      "default": "agendado"
+    },
+    "notes": {
+      "type": "string"
+    },
+    "work_order_id": {
+      "type": "string",
+      "description": "OS vinculada (opcional)"
+    },
+    "customer_name": {
+      "type": "string",
+      "description": "Cache do nome do cliente"
+    },
+    "vehicle_desc": {
+      "type": "string",
+      "description": "Cache: marca/modelo - placa"
+    },
+    "mechanic_name": {
+      "type": "string",
+      "description": "Cache do nome do t\u00e9cnico"
+    }
+  },
+  "required": [
+    "company_id",
+    "scheduled_date",
+    "service_description"
+  ],
+  "name": "Appointment",
+  "rls": {
+    "create": true,
+    "read": true,
+    "update": true,
+    "delete": true
+  }
+}

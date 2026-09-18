@@ -26,8 +26,11 @@ import Servicos from '@/pages/Servicos';
 import Ordens from '@/pages/Ordens';
 import OrdemForm from '@/pages/OrdemForm';
 import OrdemDetalhe from '@/pages/OrdemDetalhe';
+import Agenda from '@/pages/Agenda';
 import PDV from '@/pages/PDV';
 import Crediario from '@/pages/Crediario';
+import ContasPagar from '@/pages/ContasPagar';
+import FluxoCaixa from '@/pages/FluxoCaixa';
 import Fornecedores from '@/pages/Fornecedores';
 import NFe from '@/pages/NFe';
 import Relatorios from '@/pages/Relatorios';
@@ -89,8 +92,11 @@ const AuthenticatedApp = () => {
           <Route path="/ordens" element={<Ordens />} />
           <Route path="/ordens/nova" element={<OrdemForm />} />
           <Route path="/ordens/:id" element={<OrdemDetalhe />} />
+          <Route path="/agenda" element={<Agenda />} />
           <Route path="/pdv" element={<PDV />} />
           <Route path="/crediario" element={<Crediario />} />
+          <Route path="/contas-pagar" element={<ContasPagar />} />
+          <Route path="/fluxo-caixa" element={<FluxoCaixa />} />
           <Route path="/fornecedores" element={<Fornecedores />} />
           <Route path="/nfe" element={<NFe />} />
           <Route path="/relatorios" element={<Relatorios />} />

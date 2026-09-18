@@ -7,7 +7,8 @@ import { daysRemaining } from '@/lib/license';
 import {
   LayoutDashboard, Users, Car, Package, Wrench, ClipboardList,
   ShoppingCart, CreditCard, FileText, BarChart3, Settings,
-  LogOut, Menu, X, Bell, ChevronDown, Truck, History, HardHat, KeyRound
+  LogOut, Menu, X, Bell, ChevronDown, Truck, History, HardHat, KeyRound,
+  Wallet, TrendingUp, CalendarClock
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -26,8 +27,11 @@ const navItems = [
   { path: '/servicos', label: 'Serviços', icon: Wrench },
   { path: '/tecnicos', label: 'Técnicos', icon: HardHat },
   { path: '/ordens', label: 'Ordens de Serviço', icon: ClipboardList },
+  { path: '/agenda', label: 'Agenda', icon: CalendarClock },
   { path: '/pdv', label: 'PDV Rápido', icon: ShoppingCart },
   { path: '/crediario', label: 'Crediário', icon: CreditCard },
+  { path: '/contas-pagar', label: 'Contas a Pagar', icon: Wallet },
+  { path: '/fluxo-caixa', label: 'Fluxo de Caixa', icon: TrendingUp },
   { path: '/fornecedores', label: 'Fornecedores', icon: Truck },
   { path: '/nfe', label: 'NF-e', icon: FileText },
   { path: '/historico', label: 'Histórico', icon: History },

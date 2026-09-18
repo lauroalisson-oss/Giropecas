@@ -1,0 +1,97 @@
+{
+  "type": "object",
+  "properties": {
+    "company_id": {
+      "type": "string"
+    },
+    "supplier_id": {
+      "type": "string",
+      "description": "Fornecedor (opcional)"
+    },
+    "description": {
+      "type": "string"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "aluguel",
+        "energia",
+        "agua",
+        "telefone",
+        "folha",
+        "impostos",
+        "fornecedor",
+        "manutencao",
+        "marketing",
+        "outros"
+      ],
+      "default": "outros"
+    },
+    "amount": {
+      "type": "number"
+    },
+    "due_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "payment_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "a_vencer",
+        "pago",
+        "vencido"
+      ],
+      "default": "a_vencer"
+    },
+    "payment_method": {
+      "type": "string",
+      "enum": [
+        "dinheiro",
+        "pix",
+        "transferencia",
+        "boleto",
+        "cartao",
+        "debito_auto"
+      ],
+      "default": "pix"
+    },
+    "recurrence": {
+      "type": "string",
+      "enum": [
+        "unica",
+        "mensal",
+        "semanal",
+        "anual"
+      ],
+      "default": "unica"
+    },
+    "installment_number": {
+      "type": "number",
+      "default": 1
+    },
+    "total_installments": {
+      "type": "number",
+      "default": 1
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "company_id",
+    "description",
+    "amount",
+    "due_date"
+  ],
+  "name": "Bill",
+  "rls": {
+    "create": true,
+    "read": true,
+    "update": true,
+    "delete": true
+  }
+}

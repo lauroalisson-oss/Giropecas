@@ -25,7 +25,7 @@ const navItems = [
   { path: '/veiculos', label: 'Veículos', icon: Car },
   { path: '/pecas', label: 'Peças & Estoque', icon: Package },
   { path: '/servicos', label: 'Serviços', icon: Wrench },
-  { path: '/tecnicos', label: 'Técnicos', icon: HardHat },
+  { path: '/tecnicos', label: 'Mecânicos', icon: HardHat },
   { path: '/ordens', label: 'Ordens de Serviço', icon: ClipboardList },
   { path: '/agenda', label: 'Agenda', icon: CalendarClock },
   { path: '/pdv', label: 'PDV Rápido', icon: ShoppingCart },

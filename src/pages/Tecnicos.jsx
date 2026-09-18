@@ -9,12 +9,13 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, Edit2, Search, HardHat, Phone, Mail, Wrench, Percent } from 'lucide-react';
+import { Plus, Edit2, Search, HardHat, Phone, Mail, Wrench, Percent, Target } from 'lucide-react';
+import { formatCurrency } from '@/lib/formatters';
 import { useToast } from '@/components/ui/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import ComissoesPanel from '@/components/tecnicos/ComissoesPanel';
 
-const EMPTY = { name: '', cpf: '', phone: '', email: '', specialty: '', commission_percent: 0, notes: '', is_active: true };
+const EMPTY = { name: '', cpf: '', phone: '', email: '', specialty: '', commission_percent: 0, monthly_goal: 0, notes: '', is_active: true };
 
 export default function Tecnicos() {
   const { company } = useCompany();
@@ -45,10 +46,10 @@ export default function Tecnicos() {
     if (!form.name.trim()) { toast({ title: 'Nome obrigatório', variant: 'destructive' }); return; }
     setSaving(true);
     try {
-      const payload = { ...form, company_id: company.id, commission_percent: parseFloat(form.commission_percent) || 0 };
+      const payload = { ...form, company_id: company.id, commission_percent: parseFloat(form.commission_percent) || 0, monthly_goal: parseFloat(form.monthly_goal) || 0 };
       if (editing) await base44.entities.Technician.update(editing, payload);
       else await base44.entities.Technician.create(payload);
-      toast({ title: editing ? 'Técnico atualizado!' : 'Técnico cadastrado!' });
+      toast({ title: editing ? 'Mecânico atualizado!' : 'Mecânico cadastrado!' });
       setShowForm(false);
       load();
     } catch (e) {
@@ -67,11 +68,11 @@ export default function Tecnicos() {
     <div className="p-4 lg:p-6 pb-20 lg:pb-6">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Técnicos</h1>
-          <p className="text-gray-500 text-sm">Prestadores de serviço e mecânicos</p>
+          <h1 className="text-2xl font-bold text-gray-900">Mecânicos</h1>
+          <p className="text-gray-500 text-sm">Prestadores de serviço e comissionados</p>
         </div>
         <Button onClick={openNew} className="bg-red-600 hover:bg-red-700 text-white">
-          <Plus className="w-4 h-4 mr-2" />Novo Técnico
+          <Plus className="w-4 h-4 mr-2" />Novo Mecânico
         </Button>
       </div>
 
@@ -112,9 +113,9 @@ export default function Tecnicos() {
             ) : filtered.length === 0 ? (
               <div className="col-span-2 text-center py-14">
                 <HardHat className="w-12 h-12 text-gray-200 mx-auto mb-3" />
-                <p className="text-gray-400">Nenhum técnico encontrado.</p>
+                <p className="text-gray-400">Nenhum mecânico encontrado.</p>
                 <Button onClick={openNew} className="mt-3 bg-red-600 hover:bg-red-700 text-white">
-                  <Plus className="w-4 h-4 mr-2" />Cadastrar Técnico
+                  <Plus className="w-4 h-4 mr-2" />Cadastrar Mecânico
                 </Button>
               </div>
             ) : filtered.map(t => (
@@ -136,6 +137,9 @@ export default function Tecnicos() {
                         {t.email && <p className="text-xs text-gray-500 flex items-center gap-1.5"><Mail className="w-3 h-3" />{t.email}</p>}
                         {t.commission_percent > 0 && (
                           <p className="text-xs text-orange-600 flex items-center gap-1.5"><Percent className="w-3 h-3" />Comissão: {t.commission_percent}%</p>
+                        )}
+                        {t.monthly_goal > 0 && (
+                          <p className="text-xs text-blue-600 flex items-center gap-1.5"><Target className="w-3 h-3" />Meta mensal: {formatCurrency(t.monthly_goal)}</p>
                         )}
                       </div>
                     </div>
@@ -163,7 +167,7 @@ export default function Tecnicos() {
       <Dialog open={showForm} onOpenChange={v => !saving && setShowForm(v)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>{editing ? 'Editar Técnico' : 'Novo Técnico'}</DialogTitle>
+            <DialogTitle>{editing ? 'Editar Mecânico' : 'Novo Mecânico'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 py-2">
             <div>
@@ -194,6 +198,13 @@ export default function Tecnicos() {
                 <Input className="mt-1" type="number" min="0" max="100" step="0.5"
                   value={form.commission_percent} onChange={e => set('commission_percent', e.target.value)} />
               </div>
+            </div>
+            <div>
+              <Label>Meta Mensal (R$)</Label>
+              <Input className="mt-1" type="number" min="0" step="50"
+                value={form.monthly_goal} onChange={e => set('monthly_goal', e.target.value)}
+                placeholder="Ex: 3000 — atinge a meta para receber comissão" />
+              <p className="text-xs text-gray-400 mt-1">Define o valor mínimo de serviços no mês para o mecânico fazer jus à comissão.</p>
             </div>
             <div>
               <Label>Observações</Label>

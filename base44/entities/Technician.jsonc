@@ -23,6 +23,11 @@
       "type": "number",
       "default": 0
     },
+    "monthly_goal": {
+      "type": "number",
+      "default": 0,
+      "description": "Meta mensal de receita de servi\u00e7os (R$) para fazer jus \u00e0 comiss\u00e3o"
+    },
     "is_active": {
       "type": "boolean",
       "default": true

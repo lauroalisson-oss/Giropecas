@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { DollarSign, CheckCircle2, Clock, Percent } from 'lucide-react';
+import { DollarSign, CheckCircle2, Clock, Percent, Target, TrendingUp, AlertCircle } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 
 export default function ComissoesPanel() {
@@ -53,6 +53,9 @@ export default function ComissoesPanel() {
     const paidForTech = paidCommissions
       .filter(e => e.description?.includes(tech.name) && pf(e.date))
       .reduce((s, e) => s + (e.amount || 0), 0);
+    const goal = tech.monthly_goal || 0;
+    const goalReached = goal > 0 && serviceRevenue >= goal;
+    const goalPct = goal > 0 ? Math.min(100, (serviceRevenue / goal) * 100) : 0;
     return {
       tech,
       ordersCount: techOrders.length,
@@ -61,6 +64,9 @@ export default function ComissoesPanel() {
       commission,
       paid: paidForTech,
       pending: commission - paidForTech,
+      goal,
+      goalReached,
+      goalPct,
     };
   });
 
@@ -127,6 +133,11 @@ export default function ComissoesPanel() {
                       <div className="flex items-center gap-2 text-xs text-gray-500">
                         <span className="flex items-center gap-1"><Percent className="w-3 h-3" />{c.commissionRate}%</span>
                         <span>• {c.ordersCount} OS</span>
+                        {c.goal > 0 && (
+                          <span className={`flex items-center gap-1 ${c.goalReached ? 'text-green-600' : 'text-orange-600'}`}>
+                            <Target className="w-3 h-3" />{c.goalReached ? 'Meta atingida' : `Meta: ${formatCurrency(c.goal)}`}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -135,7 +146,26 @@ export default function ComissoesPanel() {
                     <p className="font-bold text-gray-900">{formatCurrency(c.serviceRevenue)}</p>
                   </div>
                 </div>
-                <div className="grid grid-cols-3 gap-2 text-center text-sm border-t pt-3">
+                {c.goal > 0 && (
+                  <div className="mt-3 border-t pt-3">
+                    <div className="flex items-center justify-between text-xs mb-1">
+                      <span className="text-gray-500 flex items-center gap-1"><Target className="w-3 h-3" />Meta mensal</span>
+                      <span className="font-medium">{formatCurrency(c.serviceRevenue)} / {formatCurrency(c.goal)}</span>
+                    </div>
+                    <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full transition-all ${c.goalReached ? 'bg-green-500' : 'bg-orange-400'}`} style={{ width: `${c.goalPct}%` }} />
+                    </div>
+                    <div className="flex items-center justify-between mt-1">
+                      <span className="text-xs text-gray-400">{c.goalPct.toFixed(0)}% da meta</span>
+                      {c.goalReached ? (
+                        <span className="text-xs text-green-600 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" />Faz jus à comissão</span>
+                      ) : (
+                        <span className="text-xs text-orange-600 flex items-center gap-1"><AlertCircle className="w-3 h-3" />Abaixo da meta</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+                <div className="grid grid-cols-3 gap-2 text-center text-sm border-t pt-3 mt-3">
                   <div>
                     <p className="text-xs text-gray-500">Comissão</p>
                     <p className="font-bold text-gray-800">{formatCurrency(c.commission)}</p>
@@ -160,7 +190,7 @@ export default function ComissoesPanel() {
               </CardContent>
             </Card>
           ))}
-          {comissoes.length === 0 && <p className="text-center text-gray-400 py-6 text-sm">Nenhum técnico cadastrado</p>}
+          {comissoes.length === 0 && <p className="text-center text-gray-400 py-6 text-sm">Nenhum mecânico cadastrado</p>}
         </div>
       )}
     </div>

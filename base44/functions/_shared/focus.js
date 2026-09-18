@@ -94,6 +94,26 @@ function icmsSituacao(taxRegime) {
   return taxRegime === 'simples_nacional' ? '102' : '00';
 }
 
+const soDigitos = (s) => String(s ?? '').replace(/\D/g, '');
+
+// Origem da mercadoria (0-8) cadastrada na peça. Fora da faixa -> 0 (nacional).
+// Importante para autopeça importada, que não pode sair como nacional.
+function icmsOrigemItem(part) {
+  const o = soDigitos(part && part.origin);
+  return /^[0-8]$/.test(o) ? o : '0';
+}
+
+// CSOSN (Simples, 3 dígitos) ou CST (regime normal, 2 dígitos) cadastrado na peça.
+// Se estiver ausente ou incompatível com o regime, cai no padrão do regime —
+// evita rejeição por enviar CST de regime errado.
+function icmsSituacaoItem(part, taxRegime) {
+  const cst = soDigitos(part && part.cst_icms);
+  const simples = taxRegime === 'simples_nacional';
+  if (simples && /^\d{3}$/.test(cst)) return cst;
+  if (!simples && /^\d{2}$/.test(cst)) return cst;
+  return icmsSituacao(taxRegime);
+}
+
 // Constrói a lista de itens no formato do gateway a partir dos itens da venda.
 // Apenas mercadorias (peças) entram na NF-e/NFC-e; serviços (mão de obra) são
 // municipais (NFS-e) e ficam fora deste documento.
@@ -106,7 +126,8 @@ export function buildItens(saleItems, partsById, taxRegime) {
     const qtd = Number(it.quantity) || 1;
     const unit = Number(it.unit_price) || 0;
     const bruto = Number(it.total_price) || +(qtd * unit).toFixed(2);
-    itens.push({
+    const ncm = soDigitos(part && part.ncm);
+    const item = {
       numero_item: String(numero++),
       codigo_produto: (part && (part.sku || part.internal_code)) || it.id || String(numero),
       descricao: it.description || (part && part.description) || 'Item',
@@ -118,10 +139,26 @@ export function buildItens(saleItems, partsById, taxRegime) {
       unidade_tributavel: (part && part.unit ? part.unit.toUpperCase() : 'UN'),
       quantidade_tributavel: qtd,
       valor_unitario_tributavel: +unit.toFixed(2),
-      ncm: (part && part.ncm) || '87089900', // NCM genérico de autopeças — ajustar por produto
-      icms_origem: '0',
-      icms_situacao_tributaria: icmsSituacao(taxRegime),
-    });
+      // NCM tem 8 dígitos; se vier inválido usa o genérico de autopeças
+      ncm: ncm.length === 8 ? ncm : '87089900',
+      icms_origem: icmsOrigemItem(part),
+      icms_situacao_tributaria: icmsSituacaoItem(part, taxRegime),
+    };
+
+    // CEST (7 dígitos) — obrigatório quando o produto está sujeito a ICMS-ST,
+    // caso comum em autopeças. Só envia se estiver completo e válido.
+    const cest = soDigitos(part && part.cest);
+    if (cest.length === 7) item.cest = cest;
+
+    // CST de PIS/COFINS (2 dígitos) cadastrado na peça
+    const cstPis = soDigitos(part && part.cst_pis);
+    if (cstPis.length >= 1 && cstPis.length <= 2) {
+      const v = cstPis.padStart(2, '0');
+      item.pis_situacao_tributaria = v;
+      item.cofins_situacao_tributaria = v;
+    }
+
+    itens.push(item);
   }
   return itens;
 }

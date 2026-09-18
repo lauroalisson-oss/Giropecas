@@ -1,12 +1,28 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
 import { useCompany } from '@/lib/CompanyContext';
 import { formatCurrency } from '@/lib/formatters';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
-import { Plus, Search, Wrench, ChevronRight, Clock } from 'lucide-react';
+import { Plus, Search, Wrench, Clock } from 'lucide-react';
+
+const EMPTY_SERVICE = {
+  name: '', description: '', standard_time_hours: 1, labor_price: 0, category: '', code: '',
+  // Fiscais (NFS-e / ISS municipal)
+  service_code_lc116: '14.01', municipal_service_code: '', iss_rate: '', iss_retido: false, cnae: '',
+};
+
+// Itens da lista da LC 116/2003 mais usados por oficina. O contador confirma
+// qual se aplica a cada serviço — a prefeitura usa o código municipal próprio.
+const LC116_OFICINA = [
+  { code: '14.01', label: 'Conserto, manutenção e conservação de veículos e máquinas' },
+  { code: '14.02', label: 'Assistência técnica' },
+  { code: '14.03', label: 'Recondicionamento de motores' },
+  { code: '14.05', label: 'Restauração, recondicionamento, pintura, polimento e congêneres' },
+  { code: '14.06', label: 'Instalação e montagem com material fornecido pelo cliente' },
+];
 
 export default function Servicos() {
   const { company } = useCompany();
@@ -15,7 +31,7 @@ export default function Servicos() {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: '', description: '', standard_time_hours: 1, labor_price: 0, category: '', code: '' });
+  const [form, setForm] = useState({ ...EMPTY_SERVICE });
   const [editId, setEditId] = useState(null);
   const [saving, setSaving] = useState(false);
 
@@ -39,18 +55,25 @@ export default function Servicos() {
   const handleSave = async () => {
     if (!form.name.trim()) return;
     setSaving(true);
-    const payload = { ...form, company_id: company.id, labor_price: parseFloat(form.labor_price) || 0, standard_time_hours: parseFloat(form.standard_time_hours) || 1 };
+    const payload = {
+      ...form,
+      company_id: company.id,
+      labor_price: parseFloat(form.labor_price) || 0,
+      standard_time_hours: parseFloat(form.standard_time_hours) || 1,
+      iss_rate: form.iss_rate === '' ? 0 : (parseFloat(form.iss_rate) || 0),
+    };
     if (editId) await base44.entities.Service.update(editId, payload);
     else await base44.entities.Service.create(payload);
     setSaving(false);
     setShowForm(false);
     setEditId(null);
-    setForm({ name: '', description: '', standard_time_hours: 1, labor_price: 0, category: '', code: '' });
+    setForm({ ...EMPTY_SERVICE });
     loadServices();
   };
 
   const handleEdit = (svc) => {
-    setForm(svc);
+    // Mescla com o padrão para serviços antigos, que não têm os campos fiscais
+    setForm({ ...EMPTY_SERVICE, ...svc, iss_rate: svc.iss_rate ?? '' });
     setEditId(svc.id);
     setShowForm(true);
   };
@@ -68,7 +91,7 @@ export default function Servicos() {
           <h1 className="text-2xl font-bold text-gray-900">Serviços</h1>
           <p className="text-gray-500 text-sm">{services.length} serviços cadastrados</p>
         </div>
-        <Button className="bg-red-600 hover:bg-red-700 text-white" onClick={() => { setShowForm(true); setEditId(null); setForm({ name: '', description: '', standard_time_hours: 1, labor_price: 0, category: '', code: '' }); }}>
+        <Button className="bg-red-600 hover:bg-red-700 text-white" onClick={() => { setShowForm(true); setEditId(null); setForm({ ...EMPTY_SERVICE }); }}>
           <Plus className="w-4 h-4 mr-2" />Novo
         </Button>
       </div>
@@ -99,6 +122,48 @@ export default function Servicos() {
                 <Input className="mt-1" value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} />
               </div>
             </div>
+
+            {/* Dados fiscais — usados na emissão de NFS-e (ISS municipal) */}
+            <div className="pt-3 mt-1 border-t">
+              <p className="text-xs font-semibold text-gray-700">Dados fiscais (NFS-e)</p>
+              <p className="text-xs text-gray-400 mb-2">
+                Usados na emissão da nota de serviço. Confirme os códigos e a alíquota com o contador ou a prefeitura.
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2">
+                  <label className="text-xs font-medium text-gray-600">Item da lista de serviços (LC 116/2003)</label>
+                  <Input className="mt-1" list="lc116-oficina" value={form.service_code_lc116}
+                    onChange={e => setForm(p => ({ ...p, service_code_lc116: e.target.value }))} placeholder="14.01" />
+                  <datalist id="lc116-oficina">
+                    {LC116_OFICINA.map(i => <option key={i.code} value={i.code}>{i.label}</option>)}
+                  </datalist>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Oficina normalmente usa <strong>14.01</strong> (conserto e manutenção de veículos).
+                  </p>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600">Código de tributação do município</label>
+                  <Input className="mt-1" value={form.municipal_service_code}
+                    onChange={e => setForm(p => ({ ...p, municipal_service_code: e.target.value }))} placeholder="varia por prefeitura" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600">Alíquota ISS (%)</label>
+                  <Input className="mt-1" type="number" step="0.01" min="0" max="5" value={form.iss_rate}
+                    onChange={e => setForm(p => ({ ...p, iss_rate: e.target.value }))} placeholder="Ex: 3" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600">CNAE (opcional)</label>
+                  <Input className="mt-1" value={form.cnae}
+                    onChange={e => setForm(p => ({ ...p, cnae: e.target.value }))} placeholder="4520-0/01" />
+                </div>
+                <div className="flex items-center gap-2 pt-5">
+                  <input id="iss_retido" type="checkbox" className="w-4 h-4 accent-red-600"
+                    checked={!!form.iss_retido} onChange={e => setForm(p => ({ ...p, iss_retido: e.target.checked }))} />
+                  <label htmlFor="iss_retido" className="text-xs font-medium text-gray-600">ISS retido na fonte</label>
+                </div>
+              </div>
+            </div>
+
             <div className="flex gap-2 pt-1">
               <Button onClick={handleSave} disabled={saving} className="bg-red-600 hover:bg-red-700 text-white">{saving ? 'Salvando...' : 'Salvar'}</Button>
               <Button variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>

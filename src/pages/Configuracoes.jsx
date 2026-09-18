@@ -140,12 +140,17 @@ export default function Configuracoes() {
   const handleSaveCompany = async () => {
     setSaving(true);
     try {
+      // iss_rate é numérico na entidade; o input devolve string
+      const payload = { ...form };
+      if ('iss_rate' in payload) {
+        payload.iss_rate = payload.iss_rate === '' || payload.iss_rate == null ? 0 : (parseFloat(payload.iss_rate) || 0);
+      }
       if (company?.id) {
-        await base44.entities.Company.update(company.id, form);
-        setCompany({ ...company, ...form });
+        await base44.entities.Company.update(company.id, payload);
+        setCompany({ ...company, ...payload });
         toast({ title: 'Configurações salvas!' });
       } else {
-        const created = await base44.entities.Company.create(form);
+        const created = await base44.entities.Company.create(payload);
         setCompany(created);
         toast({ title: 'Empresa cadastrada!' });
       }
@@ -269,9 +274,40 @@ export default function Configuracoes() {
                   </div>
                   <div>
                     <Label>Inscrição Municipal (IM)</Label>
-                    <Input className="mt-1" value={form.im || ''} onChange={e => set('im', e.target.value)} placeholder="opcional" />
+                    <Input className="mt-1" value={form.im || ''} onChange={e => set('im', e.target.value)} placeholder="obrigatória para NFS-e" />
                   </div>
                 </div>
+
+                {isFiscalPlan && (
+                  <div className="p-3 bg-gray-50 rounded-lg border space-y-3">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-700">Dados municipais (NFS-e)</p>
+                      <p className="text-xs text-gray-400">
+                        Usados na nota de serviço (ISS). A emissão de NFS-e depende de credenciamento na prefeitura.
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label>Código IBGE do município</Label>
+                        <Input className="mt-1" value={form.city_ibge_code || ''} onChange={e => set('city_ibge_code', e.target.value)} placeholder="7 dígitos" />
+                      </div>
+                      <div>
+                        <Label>CNAE principal</Label>
+                        <Input className="mt-1" value={form.cnae || ''} onChange={e => set('cnae', e.target.value)} placeholder="4520-0/01" />
+                      </div>
+                      <div>
+                        <Label>Alíquota ISS padrão (%)</Label>
+                        <Input className="mt-1" type="number" step="0.01" min="0" max="5"
+                          value={form.iss_rate ?? ''} onChange={e => set('iss_rate', e.target.value)} placeholder="Ex: 3" />
+                        <p className="text-xs text-gray-400 mt-1">Usada quando o serviço não define a própria.</p>
+                      </div>
+                      <div>
+                        <Label>Série do RPS</Label>
+                        <Input className="mt-1" value={form.nfse_series || '1'} onChange={e => set('nfse_series', e.target.value)} />
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {!isFiscalPlan && (
                   <div className="flex items-start gap-2 p-3 bg-slate-50 border border-slate-200 rounded-lg">

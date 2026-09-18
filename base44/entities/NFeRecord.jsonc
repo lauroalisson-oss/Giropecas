@@ -70,6 +70,41 @@
     "cfop": {
       "type": "string"
     },
+    "model": {
+      "type": "string",
+      "enum": [
+        "nfce",
+        "nfe",
+        "nfse"
+      ],
+      "default": "nfce",
+      "description": "Tipo do documento: NFC-e (65) e NF-e (55) são estaduais (mercadoria/ICMS); NFS-e é municipal (serviço/ISS)"
+    },
+    "rps_number": {
+      "type": "string",
+      "description": "Número do RPS (Recibo Provisório de Serviços) que originou a NFS-e"
+    },
+    "rps_series": {
+      "type": "string",
+      "default": "1",
+      "description": "Série do RPS da NFS-e"
+    },
+    "verification_code": {
+      "type": "string",
+      "description": "Código de verificação da NFS-e no portal da prefeitura"
+    },
+    "nfse_url": {
+      "type": "string",
+      "description": "Link do PDF/consulta da NFS-e no portal do município"
+    },
+    "iss_amount": {
+      "type": "number",
+      "description": "Valor do ISS da NFS-e"
+    },
+    "service_amount": {
+      "type": "number",
+      "description": "Valor total dos serviços da NFS-e"
+    },
     "notes": {
       "type": "string"
     }

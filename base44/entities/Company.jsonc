@@ -85,6 +85,29 @@
       "type": "string",
       "description": "Inscrição Municipal"
     },
+    "city_ibge_code": {
+      "type": "string",
+      "description": "Código IBGE do município do emitente (obrigatório na NFS-e)"
+    },
+    "cnae": {
+      "type": "string",
+      "description": "CNAE principal da empresa (usado na NFS-e)"
+    },
+    "iss_rate": {
+      "type": "number",
+      "default": 0,
+      "description": "Alíquota de ISS padrão do município em % (usada quando o serviço não define a sua)"
+    },
+    "nfse_enabled": {
+      "type": "boolean",
+      "default": false,
+      "description": "Emissão de NFS-e habilitada (depende de credenciamento na prefeitura)"
+    },
+    "nfse_series": {
+      "type": "string",
+      "default": "1",
+      "description": "Série do RPS da NFS-e"
+    },
     "nfce_series": {
       "type": "string",
       "default": "1",

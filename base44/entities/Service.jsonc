@@ -27,6 +27,29 @@
     },
     "category": {
       "type": "string"
+    },
+    "service_code_lc116": {
+      "type": "string",
+      "default": "14.01",
+      "description": "Item da lista de serviços da LC 116/2003. Oficina mecânica = 14.01 (conserto, manutenção e conservação de veículos)"
+    },
+    "municipal_service_code": {
+      "type": "string",
+      "description": "Código de tributação do município (varia por prefeitura; consultar a prefeitura ou o contador)"
+    },
+    "iss_rate": {
+      "type": "number",
+      "default": 0,
+      "description": "Alíquota de ISS em % (geralmente entre 2 e 5, definida pelo município)"
+    },
+    "iss_retido": {
+      "type": "boolean",
+      "default": false,
+      "description": "ISS retido na fonte pelo tomador do serviço"
+    },
+    "cnae": {
+      "type": "string",
+      "description": "Código CNAE da atividade (opcional; exigido por algumas prefeituras)"
     }
   },
   "required": [

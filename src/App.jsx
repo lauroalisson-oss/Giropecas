@@ -30,7 +30,7 @@ import Agenda from '@/pages/Agenda';
 import PDV from '@/pages/PDV';
 import Crediario from '@/pages/Crediario';
 import ContasPagar from '@/pages/ContasPagar';
-import FluxoCaixa from '@/pages/FluxoCaixa';
+import Compras from '@/pages/Compras';
 import Fornecedores from '@/pages/Fornecedores';
 import NFe from '@/pages/NFe';
 import Relatorios from '@/pages/Relatorios';
@@ -96,7 +96,7 @@ const AuthenticatedApp = () => {
           <Route path="/pdv" element={<PDV />} />
           <Route path="/crediario" element={<Crediario />} />
           <Route path="/contas-pagar" element={<ContasPagar />} />
-          <Route path="/fluxo-caixa" element={<FluxoCaixa />} />
+          <Route path="/compras" element={<Compras />} />
           <Route path="/fornecedores" element={<Fornecedores />} />
           <Route path="/nfe" element={<NFe />} />
           <Route path="/relatorios" element={<Relatorios />} />

@@ -31,7 +31,7 @@ const navItems = [
   { path: '/pdv', label: 'PDV Rápido', icon: ShoppingCart },
   { path: '/crediario', label: 'Crediário', icon: CreditCard },
   { path: '/contas-pagar', label: 'Contas a Pagar', icon: Wallet },
-  { path: '/fluxo-caixa', label: 'Fluxo de Caixa', icon: TrendingUp },
+  { path: '/compras', label: 'Compras', icon: ShoppingCart },
   { path: '/fornecedores', label: 'Fornecedores', icon: Truck },
   { path: '/nfe', label: 'NF-e', icon: FileText },
   { path: '/historico', label: 'Histórico', icon: History },

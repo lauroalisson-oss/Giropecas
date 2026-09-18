@@ -8,6 +8,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
 import { Download, TrendingUp, TrendingDown, Package, ClipboardList } from 'lucide-react';
+import FluxoCaixaTab from '@/components/relatorios/FluxoCaixaTab';
+import RelatoriosGerenciais from '@/components/relatorios/RelatoriosGerenciais';
 
 const COLORS = ['#dc2626', '#1a1a1a', '#6b7280', '#f97316', '#22c55e'];
 
@@ -139,6 +141,7 @@ export default function Relatorios() {
           <TabsTrigger value="vendas">Vendas</TabsTrigger>
           <TabsTrigger value="os">OS</TabsTrigger>
           <TabsTrigger value="caixa">Fluxo de Caixa</TabsTrigger>
+          <TabsTrigger value="gerenciais">Gerenciais</TabsTrigger>
           <TabsTrigger value="crediario">Crediário</TabsTrigger>
         </TabsList>
 
@@ -243,30 +246,11 @@ export default function Relatorios() {
         </TabsContent>
 
         <TabsContent value="caixa">
-          <Card>
-            <CardHeader className="pb-2">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-sm">Fluxo de Caixa</CardTitle>
-                <Button size="sm" variant="outline" onClick={() => exportCSV(cashFlowData, 'fluxo-caixa')}>
-                  <Download className="w-3 h-3 mr-1" />CSV
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {cashFlowData.length === 0 ? <div className="text-center py-8 text-gray-400 text-sm">Sem lançamentos</div> : (
-                <ResponsiveContainer width="100%" height={250}>
-                  <LineChart data={cashFlowData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={d => new Date(d).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} />
-                    <YAxis tick={{ fontSize: 10 }} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
-                    <Tooltip formatter={v => formatCurrency(v)} labelFormatter={d => formatDate(d)} />
-                    <Line type="monotone" dataKey="receita" stroke="#22c55e" strokeWidth={2} dot={false} name="Receita" />
-                    <Line type="monotone" dataKey="despesa" stroke="#dc2626" strokeWidth={2} dot={false} name="Despesa" />
-                  </LineChart>
-                </ResponsiveContainer>
-              )}
-            </CardContent>
-          </Card>
+          <FluxoCaixaTab />
+        </TabsContent>
+
+        <TabsContent value="gerenciais">
+          <RelatoriosGerenciais />
         </TabsContent>
 
         <TabsContent value="crediario">

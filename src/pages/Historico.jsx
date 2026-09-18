@@ -10,13 +10,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Search, Download, ClipboardList, ShoppingCart, Filter, X, Trash2, Edit2, AlertTriangle, Printer, FileText, Receipt } from 'lucide-react';
+import { Search, Download, ClipboardList, ShoppingCart, Filter, X, Trash2, Edit2, AlertTriangle, Printer, FileText, Receipt, Car } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useToast } from '@/components/ui/use-toast';
 import { printDocument } from '@/components/PrintReceipt';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import EmitirNotaButton from '@/components/EmitirNotaButton';
 import { NFE_STATUS_LABEL, NFE_STATUS_COLOR } from '@/lib/fiscal';
+import VeiculoHistoricoPanel from '@/components/historico/VeiculoHistoricoPanel';
 
 const STATUS_COLORS = {
   aberta: 'bg-blue-100 text-blue-700',
@@ -371,6 +372,9 @@ export default function Historico() {
             <ShoppingCart className="w-3.5 h-3.5" />Vendas PDV
             <Badge className="ml-1 bg-gray-200 text-gray-700 text-xs px-1.5">{filteredPdvSales.length}</Badge>
           </TabsTrigger>
+          <TabsTrigger value="veiculo" className="flex items-center gap-1.5">
+            <Car className="w-3.5 h-3.5" />Garantia & Veículo
+          </TabsTrigger>
         </TabsList>
 
         {/* OS Tab */}
@@ -571,9 +575,12 @@ export default function Historico() {
             </CardContent>
           </Card>
         </TabsContent>
-      </Tabs>
 
-      {/* Confirm delete dialog */}
+        {/* Veículo / Garantia Tab */}
+        <TabsContent value="veiculo">
+          <VeiculoHistoricoPanel />
+        </TabsContent>
+      </Tabs>
       {confirmDelete && (
         <Dialog open onOpenChange={() => !deleting && setConfirmDelete(null)}>
           <DialogContent className="max-w-sm">

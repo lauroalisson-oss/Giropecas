@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Plus, Search, Package, AlertTriangle, ChevronRight } from 'lucide-react';
+import EstoqueAvancadoPanel from '@/components/pecas/EstoqueAvancadoPanel';
 
 export default function Pecas() {
   const { company } = useCompany();
@@ -68,10 +69,13 @@ export default function Pecas() {
             <AlertTriangle className="w-3.5 h-3.5" />Estoque Baixo {lowStockCount > 0 && `(${lowStockCount})`}
           </TabsTrigger>
           <TabsTrigger value="inactive">Inativos</TabsTrigger>
+          <TabsTrigger value="avancado">Gestão Avançada</TabsTrigger>
         </TabsList>
       </Tabs>
 
-      {loading ? <div className="text-center py-12 text-gray-400">Carregando...</div> :
+      {tab === 'avancado' ? (
+        <EstoqueAvancadoPanel />
+      ) : loading ? <div className="text-center py-12 text-gray-400">Carregando...</div> :
         filtered.length === 0 ? (
           <div className="text-center py-16">
             <Package className="w-14 h-14 text-gray-200 mx-auto mb-4" />

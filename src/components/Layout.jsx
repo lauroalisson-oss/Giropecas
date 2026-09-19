@@ -8,7 +8,7 @@ import {
   LayoutDashboard, Users, Car, Package, Wrench, ClipboardList,
   ShoppingCart, CreditCard, FileText, BarChart3, Settings,
   LogOut, Menu, X, Bell, ChevronDown, Truck, History, HardHat, KeyRound,
-  Wallet, CalendarClock
+  Wallet, CalendarClock, ShieldCheck
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -43,7 +43,7 @@ export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
   const { user, logout } = useAuth();
-  const { company } = useCompany();
+  const { company, ehProvedor, sairDaOficina } = useCompany();
   const { superAdmin, license } = useLicense();
 
   const handleLogout = () => {
@@ -81,7 +81,9 @@ export default function Layout() {
           </div>
           <div className="min-w-0">
             <p className="text-white font-bold text-sm truncate">GiroPeças</p>
-            <p className="text-gray-400 text-xs truncate">{company?.name || 'Selecione empresa'}</p>
+            <p className="text-gray-400 text-xs truncate">
+              {company?.name || (ehProvedor ? 'Painel do provedor' : 'Oficina não vinculada')}
+            </p>
           </div>
           <button
             onClick={() => setSidebarOpen(false)}
@@ -178,6 +180,21 @@ export default function Layout() {
             <Bell className="w-5 h-5" />
           </button>
         </header>
+
+        {/* Aviso de contexto: o provedor entrou na oficina de um cliente.
+            Sem isto é fácil cadastrar dados no lugar errado sem perceber. */}
+        {ehProvedor && company && (
+          <div className="flex items-center gap-2 px-4 py-2 bg-amber-100 border-b border-amber-300 text-amber-900 text-sm">
+            <ShieldCheck className="w-4 h-4 flex-shrink-0" />
+            <span className="truncate">
+              Você está dentro da oficina <strong>{company.name}</strong>. O que criar aqui fica no cadastro dela.
+            </span>
+            <button onClick={sairDaOficina}
+              className="ml-auto flex-shrink-0 font-medium underline hover:no-underline">
+              Sair da oficina
+            </button>
+          </div>
+        )}
 
         {/* Page content */}
         <main className="flex-1 overflow-y-auto">

@@ -1,96 +1,74 @@
+// Oficina do usuário logado.
+//
+// O isolamento NÃO é mais feito aqui. Antes, este contexto trazia TODAS as
+// empresas com Company.list() e filtrava no JavaScript — o que, com a chave
+// pública do Supabase, permitiria a qualquer lojista ler os dados dos
+// outros direto na API. Agora a RLS já devolve apenas o que o usuário pode
+// ver: a própria oficina, ou todas no caso do super-admin.
+
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { base44 } from '@/api/base44Client';
-import { useLicense } from '@/lib/LicenseContext';
+import { useAuth } from '@/lib/AuthContext';
 import { isSuperAdmin } from '@/lib/license';
 
 const CompanyContext = createContext(null);
+const CHAVE_SELECAO = 'motogestao_company_id';
 
 export function CompanyProvider({ children }) {
-  const { license } = useLicense();
+  const { user, isLoadingAuth } = useAuth();
   const [company, setCompany] = useState(null);
   const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const loadCompany = useCallback(async () => {
+    if (isLoadingAuth) return;
+    if (!user) { setCompany(null); setCompanies([]); setLoading(false); return; }
+
+    setLoading(true);
     try {
-      const user = await base44.auth.me();
-      if (!user) { setLoading(false); return; }
+      // A RLS decide o escopo. Para o lojista vem só a oficina dele;
+      // para o super-admin, todas.
+      const visiveis = await base44.entities.Company.list('name');
+      setCompanies(visiveis);
 
-      const all = await base44.entities.Company.list();
-      const superAdmin = isSuperAdmin(user);
+      if (visiveis.length === 0) { setCompany(null); return; }
 
-      // Isolamento multi-empresa: usuário comum só enxerga a própria empresa
-      // (a que ele criou ou a vinculada à sua chave de acesso).
-      // O super-admin enxerga e pode alternar entre todas.
-      let scoped;
-      if (superAdmin) {
-        scoped = all;
-      } else {
-        scoped = all.filter(c =>
-          c.created_by === user.email || (license?.company_id && c.id === license.company_id)
-        );
-      }
-      setCompanies(scoped);
-
-      if (scoped.length > 0) {
-        const storedId = localStorage.getItem('motogestao_company_id');
-        const found = storedId ? scoped.find(c => c.id === storedId) : null;
-        const selected = found || scoped[0];
-        setCompany(selected);
-
-        // Vincula a empresa à chave de acesso (para o painel do super-admin)
-        if (!superAdmin && license?.id && !license.company_id) {
-          try { await base44.entities.AccessKey.update(license.id, { company_id: selected.id }); } catch { /* ignore */ }
-        }
-
-        // Sincroniza o plano e o grau de permissão da empresa com a licença ativa.
-        // Fonte da verdade é a chave gerada pelo super-admin.
-        if (!superAdmin && license?.plan_type) {
-          const patch = {};
-          if (selected.plan_type !== license.plan_type) patch.plan_type = license.plan_type;
-          if (license.plan_type === 'fiscal') {
-            const limiteLicenca = license.fiscal_note_limit || 100;
-            if (selected.fiscal_note_limit !== limiteLicenca) patch.fiscal_note_limit = limiteLicenca;
-            // Módulo fiscal habilitado por concessão do super-admin
-            if (selected.nfe_enabled !== true) patch.nfe_enabled = true;
-          } else if (selected.nfe_enabled) {
-            // Downgrade para Não-Fiscal: desliga o módulo
-            patch.nfe_enabled = false;
-          }
-          if (Object.keys(patch).length) {
-            try {
-              await base44.entities.Company.update(selected.id, patch);
-              Object.assign(selected, patch);
-              setCompany({ ...selected });
-            } catch { /* ignore */ }
-          }
-        }
-      } else {
-        setCompany(null);
-      }
+      // O super-admin alterna entre oficinas; a escolha fica no navegador.
+      const salvo = localStorage.getItem(CHAVE_SELECAO);
+      const encontrado = salvo ? visiveis.find(c => c.id === salvo) : null;
+      setCompany(encontrado || visiveis[0]);
     } catch (e) {
-      console.error('Error loading company:', e);
+      console.error('Erro ao carregar a oficina:', e);
+      setCompany(null);
     } finally {
       setLoading(false);
     }
-  }, [license]);
+  }, [user, isLoadingAuth]);
 
-  useEffect(() => {
-    loadCompany();
-  }, [loadCompany]);
+  useEffect(() => { loadCompany(); }, [loadCompany]);
 
-  const switchCompany = (comp) => {
+  const switchCompany = useCallback((comp) => {
+    if (!comp?.id) return;
     setCompany(comp);
-    localStorage.setItem('motogestao_company_id', comp.id);
+    localStorage.setItem(CHAVE_SELECAO, comp.id);
+  }, []);
+
+  const value = {
+    company,
+    companies,
+    setCompany,
+    switchCompany,
+    loading,
+    reload: loadCompany,
+    // Só o provedor alterna entre oficinas.
+    podeAlternar: isSuperAdmin(user) && companies.length > 1,
   };
 
-  return (
-    <CompanyContext.Provider value={{ company, companies, setCompany, switchCompany, loading, reload: loadCompany }}>
-      {children}
-    </CompanyContext.Provider>
-  );
+  return <CompanyContext.Provider value={value}>{children}</CompanyContext.Provider>;
 }
 
 export function useCompany() {
-  return useContext(CompanyContext);
+  const ctx = useContext(CompanyContext);
+  if (!ctx) throw new Error('useCompany deve ser usado dentro de CompanyProvider');
+  return ctx;
 }

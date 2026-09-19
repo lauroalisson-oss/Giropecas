@@ -1,7 +1,7 @@
 import { Toaster } from "@/components/ui/toaster"
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
-import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Route, Routes, Navigate, Outlet } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import ScrollToTop from './components/ScrollToTop';
@@ -40,6 +40,7 @@ import Login from '@/pages/Login';
 import ForgotPassword from '@/pages/ForgotPassword';
 import ResetPassword from '@/pages/ResetPassword';
 import PasswordGate from '@/components/PasswordGate';
+import CompanyGate from '@/components/CompanyGate';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth } = useAuth();
@@ -70,6 +71,12 @@ const AuthenticatedApp = () => {
             </LicenseGate>
           </LicenseProvider>
         }>
+          {/* Painel do provedor: fica FORA do CompanyGate, porque não
+              pertence a nenhuma oficina. */}
+          <Route path="/admin/chaves" element={<AdminChaves />} />
+
+          {/* Telas operacionais: exigem uma oficina selecionada. */}
+          <Route element={<CompanyGate><Outlet /></CompanyGate>}>
           <Route path="/" element={<Dashboard />} />
           <Route path="/clientes" element={<Clientes />} />
           <Route path="/clientes/novo" element={<ClienteForm />} />
@@ -97,7 +104,7 @@ const AuthenticatedApp = () => {
           <Route path="/historico" element={<Historico />} />
           <Route path="/tecnicos" element={<Tecnicos />} />
           <Route path="/configuracoes" element={<Configuracoes />} />
-          <Route path="/admin/chaves" element={<AdminChaves />} />
+          </Route>
         </Route>
       </Route>
       <Route path="*" element={<PageNotFound />} />

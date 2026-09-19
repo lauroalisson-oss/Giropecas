@@ -33,9 +33,17 @@ export function CompanyProvider({ children }) {
 
       if (visiveis.length === 0) { setCompany(null); return; }
 
-      // O super-admin alterna entre oficinas; a escolha fica no navegador.
       const salvo = localStorage.getItem(CHAVE_SELECAO);
       const encontrado = salvo ? visiveis.find(c => c.id === salvo) : null;
+
+      // O provedor NÃO é inquilino: ele não pertence a oficina nenhuma.
+      // Sem isto, ele cairia dentro da primeira empresa da lista — e
+      // passaria a ver (e criar) dados dentro da oficina de um cliente.
+      // Ele só entra numa oficina quando escolhe explicitamente, para dar
+      // suporte.
+      if (isSuperAdmin(user)) { setCompany(encontrado || null); return; }
+
+      // O lojista tem exatamente uma oficina (a RLS garante isso).
       setCompany(encontrado || visiveis[0]);
     } catch (e) {
       console.error('Erro ao carregar a oficina:', e);
@@ -53,15 +61,23 @@ export function CompanyProvider({ children }) {
     localStorage.setItem(CHAVE_SELECAO, comp.id);
   }, []);
 
+  // O provedor sai da oficina em que entrou e volta ao painel dele.
+  const sairDaOficina = useCallback(() => {
+    setCompany(null);
+    localStorage.removeItem(CHAVE_SELECAO);
+  }, []);
+
   const value = {
     company,
     companies,
     setCompany,
     switchCompany,
+    sairDaOficina,
     loading,
     reload: loadCompany,
+    ehProvedor: isSuperAdmin(user),
     // Só o provedor alterna entre oficinas.
-    podeAlternar: isSuperAdmin(user) && companies.length > 1,
+    podeAlternar: isSuperAdmin(user) && companies.length > 0,
   };
 
   return <CompanyContext.Provider value={value}>{children}</CompanyContext.Provider>;

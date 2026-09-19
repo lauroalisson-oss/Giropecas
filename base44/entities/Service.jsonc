@@ -28,6 +28,14 @@
     "category": {
       "type": "string"
     },
+    "interval_months": {
+      "type": "number",
+      "description": "De quantos em quantos meses este servico precisa ser refeito (manutencao preventiva). Vazio = nao se repete."
+    },
+    "interval_km": {
+      "type": "number",
+      "description": "De quantos em quantos km este servico precisa ser refeito. Vazio = nao depende de km."
+    },
     "service_code_lc116": {
       "type": "string",
       "default": "14.01",

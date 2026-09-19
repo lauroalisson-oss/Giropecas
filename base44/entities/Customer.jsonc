@@ -16,7 +16,13 @@
       "default": "fisica"
     },
     "tax_id": {
-      "type": "string"
+      "type": "string",
+      "description": "CPF ou CNPJ. Exigido (com a data de nascimento) para liberar crediário."
+    },
+    "birth_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Data de nascimento. Opcional no cadastro, mas exigida para liberar crediário e usada nos aniversariantes do mês."
     },
     "phone": {
       "type": "string"

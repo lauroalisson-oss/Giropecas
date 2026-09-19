@@ -1,3 +1,5 @@
+// Assinatura da DPS — roda no Electron (CommonJS), no computador da oficina.
+//
 // Assinatura da DPS no padrão do Sistema Nacional NFS-e.
 //
 // É a parte que mais derruba integração. O erro E0714 ("arquivo enviado com
@@ -10,16 +12,16 @@
 // Por isso NÃO escrevemos canonicalização à mão: usamos xml-crypto, que
 // materializa os namespaces herdados corretamente.
 
-import forge from 'node-forge';
-import { SignedXml } from 'xml-crypto';
-import { DOMParser } from '@xmldom/xmldom';
-import { gzipSync } from 'node:zlib';
+const forge = require('node-forge');
+const { SignedXml } = require('xml-crypto');
+const { DOMParser } = require('@xmldom/xmldom');
+const { gzipSync } = require('node:zlib');
 
-export const NS_NFSE = 'http://www.sped.fazenda.gov.br/nfse';
+const NS_NFSE = 'http://www.sped.fazenda.gov.br/nfse';
 
 // Extrai chave privada e certificado de um .pfx (PKCS#12).
 // O Web Crypto não abre .pfx; por isso node-forge.
-export function lerCertificado(pfxBuffer, senha) {
+function lerCertificado(pfxBuffer, senha) {
   const p12Der = forge.util.createBuffer(
     Buffer.isBuffer(pfxBuffer) ? pfxBuffer.toString('binary') : pfxBuffer,
   );
@@ -73,7 +75,7 @@ export function lerCertificado(pfxBuffer, senha) {
 // ATENÇÃO: aqui 2 = CNPJ e 1 = CPF. Trocar isso gera o erro E0004, e a
 // documentação de terceiros diverge nesse ponto — confira contra o XSD
 // oficial antes de mudar.
-export function montarIdDps({ codigoMunicipio, cnpjCpf, serie, numero }) {
+function montarIdDps({ codigoMunicipio, cnpjCpf, serie, numero }) {
   const doc = String(cnpjCpf || '').replace(/\D/g, '');
   if (doc.length !== 11 && doc.length !== 14) {
     throw new Error('CNPJ/CPF do emitente inválido para montar o Id da DPS.');
@@ -99,7 +101,7 @@ export function montarIdDps({ codigoMunicipio, cnpjCpf, serie, numero }) {
 }
 
 // Assina o <infDPS> e insere a <Signature> como último filho do <DPS>.
-export function assinarDps(xmlDps, { privateKeyPem, certificateBase64 }, idInfDps) {
+function assinarDps(xmlDps, { privateKeyPem, certificateBase64 }, idInfDps) {
   const doc = new DOMParser().parseFromString(xmlDps, 'text/xml');
   const infDps = doc.getElementsByTagName('infDPS')[0];
   if (!infDps) throw new Error('XML da DPS sem elemento infDPS.');
@@ -133,6 +135,8 @@ export function assinarDps(xmlDps, { privateKeyPem, certificateBase64 }, idInfDp
 }
 
 // O Sefin recebe o XML assinado compactado em GZip e codificado em Base64.
-export function compactarParaEnvio(xmlAssinado) {
+function compactarParaEnvio(xmlAssinado) {
   return gzipSync(Buffer.from(xmlAssinado, 'utf8')).toString('base64');
 }
+
+module.exports = { NS_NFSE, lerCertificado, montarIdDps, assinarDps, compactarParaEnvio };

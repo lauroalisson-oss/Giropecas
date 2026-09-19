@@ -4,7 +4,40 @@
 // A ordem dos elementos dentro de infDPS é definida pelo XSD e NÃO pode
 // mudar — XML Schema valida sequência.
 
-import { montarIdDps, NS_NFSE } from './nfse-assinatura.js';
+export const NS_NFSE = 'http://www.sped.fazenda.gov.br/nfse';
+
+// Monta o Id da DPS: 45 caracteres.
+// "DPS" + município (7) + tipo de inscrição (1) + CNPJ/CPF (14, com zeros à
+// esquerda) + série (5) + número (15).
+//
+// ATENÇÃO: aqui 2 = CNPJ e 1 = CPF. Trocar isso gera o erro E0004, e a
+// documentação de terceiros diverge nesse ponto — confira contra o XSD
+// oficial antes de mudar.
+export function montarIdDps({ codigoMunicipio, cnpjCpf, serie, numero }) {
+  const doc = String(cnpjCpf || '').replace(/\D/g, '');
+  if (doc.length !== 11 && doc.length !== 14) {
+    throw new Error('CNPJ/CPF do emitente inválido para montar o Id da DPS.');
+  }
+  const tipoInscricao = doc.length === 14 ? '2' : '1';
+  // Código IBGE tem exatamente 7 dígitos. NÃO completar com zeros: '123'
+  // viraria '0000123', que é outro município — a nota sairia atribuída à
+  // cidade errada em vez de falhar.
+  const mun = String(codigoMunicipio || '').replace(/\D/g, '');
+  if (mun.length !== 7) {
+    throw new Error(`Código IBGE do município inválido: "${codigoMunicipio}" (precisa ter exatamente 7 dígitos).`);
+  }
+
+  const id = 'DPS'
+    + mun
+    + tipoInscricao
+    + doc.padStart(14, '0')
+    + String(serie || '1').replace(/\D/g, '').padStart(5, '0')
+    + String(numero || '1').replace(/\D/g, '').padStart(15, '0');
+
+  if (id.length !== 45) throw new Error(`Id da DPS ficou com ${id.length} caracteres (esperado 45).`);
+  return id;
+}
+
 
 const dig = (v) => String(v ?? '').replace(/\D/g, '');
 

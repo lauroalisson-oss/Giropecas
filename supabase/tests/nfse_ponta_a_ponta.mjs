@@ -1,7 +1,9 @@
 import fs from 'fs';
 import { gunzipSync } from 'node:zlib';
 import { montarDps } from '/home/user/Giropecas/api/_lib/nfse-dps.js';
-import { lerCertificado, assinarDps, compactarParaEnvio } from '/home/user/Giropecas/api/_lib/nfse-assinatura.js';
+import { createRequire } from 'module';
+const _req = createRequire(import.meta.url);
+const { lerCertificado, assinarDps, compactarParaEnvio } = _req('/home/user/Giropecas/desktop/nfse/assinatura.js');
 import { SignedXml } from '/home/user/Giropecas/node_modules/xml-crypto/lib/index.js';
 import { DOMParser } from '/home/user/Giropecas/node_modules/@xmldom/xmldom/lib/index.js';
 

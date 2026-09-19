@@ -83,6 +83,7 @@
       if (res.ok) {
         toast('Licença ativada! Válida por ' + L.durationLabel(res.license.durationDays) + '.');
         render();
+  if (location.hash === '#/config') carregarCertificado();
       } else {
         document.getElementById('gate-error').innerHTML =
           '<div class="gate-error">' + esc(res.reason) + '</div>';
@@ -676,6 +677,8 @@
       (lic ? L.daysRemaining(lic.expiresAt) : 0) + ' dias restantes)</p>' +
       '<div style="margin-top:12px"><button class="btn secondary" onclick="_cfgNewKey()">Ativar nova chave</button></div></div>' +
 
+      cardCertificado() +
+
       '<div class="card"><h3 style="margin-bottom:12px">💾 Backup dos dados</h3>' +
       '<p style="color:var(--gray-500);margin-bottom:12px">Os dados ficam salvos apenas neste dispositivo. Exporte backups regularmente.</p>' +
       '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
@@ -685,6 +688,113 @@
       '</div><input type="file" id="backup-file" accept=".json" style="display:none"/></div>' +
       '</div>';
   }
+
+  /* ---- Certificado digital (só existe dentro do app desktop) ----
+     O certificado e a senha ficam NESTE computador. A emissão de NFS-e
+     acontece aqui, e não num servidor — por isso o provedor nunca guarda
+     certificado de cliente nenhum. */
+  var _certInfo = null;
+
+  function cardCertificado() {
+    if (!window.giropecasNFSe) {
+      // No navegador não há como emitir: o Sefin exige certificado no
+      // handshake TLS, coisa que página web não faz.
+      return '<div class="card"><h3 style="margin-bottom:12px">📄 Certificado digital</h3>' +
+        '<p style="color:var(--gray-500);line-height:1.7">A emissão de NFS-e só funciona no ' +
+        '<b>aplicativo instalado no computador</b> da oficina, porque o certificado precisa ' +
+        'ficar nesta máquina.</p></div>';
+    }
+
+    var c = _certInfo;
+    var corpo;
+
+    if (!c) {
+      corpo = '<p style="color:var(--gray-500)">Verificando...</p>';
+    } else if (!c.configurado) {
+      corpo = '<p style="color:var(--gray-500);margin-bottom:12px">Nenhum certificado configurado. ' +
+        'Envie o arquivo <b>.pfx</b> (certificado A1) da oficina para emitir NFS-e.</p>' +
+        '<button class="btn" onclick="_certEscolher()">Configurar certificado</button>';
+    } else {
+      var alerta = '';
+      if (c.expirado) {
+        alerta = '<p style="color:var(--red);font-weight:600">⚠ Certificado VENCIDO — renove para voltar a emitir.</p>';
+      } else if (typeof c.diasParaVencer === 'number' && c.diasParaVencer <= 30) {
+        alerta = '<p style="color:#b45309;font-weight:600">⚠ Vence em ' + c.diasParaVencer + ' dia(s). Providencie a renovação.</p>';
+      }
+      var senhaAviso = c.senhaGuardada
+        ? '<span style="color:var(--green,#15803d)">senha guardada com segurança neste computador</span>'
+        : '<span style="color:#b45309">senha não guardada — será pedida a cada emissão</span>';
+
+      corpo = alerta +
+        '<p style="line-height:1.9">' +
+        (c.titular ? 'Titular: <b>' + esc(String(c.titular).slice(0, 60)) + '</b><br>' : '') +
+        (c.validoAte ? 'Válido até: <b>' + dateBR(c.validoAte) + '</b><br>' : '') +
+        'Proteção: ' + senhaAviso + '</p>' +
+        (c.erro ? '<p style="color:var(--red)">' + esc(c.erro) + '</p>' : '') +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">' +
+        '<button class="btn secondary" onclick="_certEscolher()">Trocar certificado</button>' +
+        '<button class="btn secondary" style="color:var(--red)" onclick="_certRemover()">Remover</button>' +
+        '</div>';
+    }
+
+    return '<div class="card"><h3 style="margin-bottom:12px">📄 Certificado digital (NFS-e)</h3>' +
+      corpo +
+      '<p style="color:var(--gray-500);font-size:12px;margin-top:12px;line-height:1.6">' +
+      'O arquivo e a senha ficam <b>somente neste computador</b> e nunca são enviados para a internet. ' +
+      'Por isso a emissão de nota só funciona daqui.</p></div>';
+  }
+
+  // Busca a situação e redesenha quando a tela de config abre.
+  function carregarCertificado() {
+    if (!window.giropecasNFSe) return;
+    window.giropecasNFSe.situacaoCertificado().then(function (r) {
+      _certInfo = r && r.ok ? r.dados : { configurado: false, erro: r && r.erro };
+      if (location.hash === '#/config') render();
+    });
+  }
+
+  window._certEscolher = function () {
+    window.giropecasNFSe.escolherArquivo().then(function (caminho) {
+      if (!caminho) return;
+      var nome = String(caminho).split(/[\\/]/).pop();
+      openModal(
+        '<h3>Senha do certificado</h3>' +
+        '<p style="color:var(--gray-500);margin:8px 0 12px">Arquivo: <b>' + esc(nome) + '</b></p>' +
+        '<div class="form-grid" style="grid-template-columns:1fr">' +
+        '<label>Senha<input type="password" id="cert-senha" autocomplete="off"/></label>' +
+        '</div>' +
+        '<p id="cert-erro" style="color:var(--red);margin-top:8px"></p>' +
+        '<div class="modal-actions"><button class="btn secondary" onclick="closeModal()">Cancelar</button>' +
+        '<button class="btn" id="cert-ok">Salvar</button></div>'
+      );
+      document.getElementById('cert-ok').onclick = function () {
+        var senha = val('cert-senha');
+        if (!senha) { document.getElementById('cert-erro').textContent = 'Informe a senha.'; return; }
+        this.disabled = true; this.textContent = 'Verificando...';
+        var botao = this;
+        window.giropecasNFSe.salvarCertificado(caminho, senha).then(function (r) {
+          if (!r.ok) {
+            // A senha é conferida AQUI, não na hora de emitir com o
+            // cliente esperando no balcão.
+            document.getElementById('cert-erro').textContent = r.erro;
+            botao.disabled = false; botao.textContent = 'Salvar';
+            return;
+          }
+          closeModal();
+          toast('Certificado configurado!');
+          carregarCertificado();
+        });
+      };
+    });
+  };
+
+  window._certRemover = function () {
+    if (!confirm('Remover o certificado deste computador? A oficina não poderá emitir NFS-e até configurar de novo.')) return;
+    window.giropecasNFSe.removerCertificado().then(function () {
+      toast('Certificado removido.');
+      carregarCertificado();
+    });
+  };
 
   window._cfgSave = function () {
     var config = dbGet('config', {});
@@ -806,7 +916,12 @@
     renderShell(page());
   }
 
-  window.addEventListener('hashchange', render);
+  window.addEventListener('hashchange', function () {
+    render();
+    // Ao abrir Configurações, busca a situação do certificado local.
+    // Só faz sentido no app desktop; no navegador giropecasNFSe não existe.
+    if (location.hash === '#/config' && _certInfo === null) carregarCertificado();
+  });
 
   // Verifica expiração periodicamente (a cada minuto)
   setInterval(function () {
@@ -814,4 +929,6 @@
   }, 60000);
 
   render();
+  // Se o app abrir já em Configurações, busca a situação do certificado.
+  if (location.hash === '#/config') carregarCertificado();
 })();

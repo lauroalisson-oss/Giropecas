@@ -288,74 +288,7 @@ export default function AdminChaves() {
         </CardContent>
       </Card>
 
-      <NFSeProbeCard toast={toast} />
     </div>
-  );
-}
-
-// TEMPORÁRIO — diagnóstico da viabilidade da NFS-e Nacional direta.
-// Roda a function nfseProbe e mostra o resultado. Não emite nada.
-// Remover quando a decisão de arquitetura estiver fechada.
-function NFSeProbeCard({ toast }) {
-  const [rodando, setRodando] = useState(false);
-  const [resultado, setResultado] = useState(null);
-
-  const rodar = async () => {
-    setRodando(true);
-    setResultado(null);
-    try {
-      const { data } = await base44.functions.invoke('nfseProbe', {});
-      setResultado(data);
-    } catch (e) {
-      setResultado({ erro_ao_chamar: e?.message || String(e) });
-      toast({
-        title: 'Não foi possível chamar a function',
-        description: 'Se disser que não existe, a function ainda não foi publicada.',
-        variant: 'destructive',
-      });
-    } finally {
-      setRodando(false);
-    }
-  };
-
-  const texto = resultado ? JSON.stringify(resultado, null, 2) : '';
-
-  return (
-    <Card className="mt-6 border-dashed">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-sm flex items-center gap-2">
-          <ShieldCheck className="w-4 h-4" />Diagnóstico — NFS-e Nacional (temporário)
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <p className="text-xs text-gray-500">
-          Verifica se o runtime consegue usar certificado de cliente (mTLS), ler o
-          certificado <code>.pfx</code>, assinar e compactar. <strong>Não emite nota
-          nem envia dados.</strong>
-        </p>
-        <Button size="sm" variant="outline" onClick={rodar} disabled={rodando}>
-          {rodando ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-          {rodando ? 'Testando...' : 'Rodar diagnóstico'}
-        </Button>
-
-        {resultado && (
-          <div className="space-y-2">
-            {resultado.veredito && (
-              <div className={`p-3 rounded-lg border text-sm ${resultado.integracao_direta_possivel
-                ? 'bg-green-50 border-green-200 text-green-800'
-                : 'bg-red-50 border-red-200 text-red-800'}`}>
-                {resultado.veredito}
-              </div>
-            )}
-            <pre className="text-xs bg-gray-900 text-gray-100 p-3 rounded-lg overflow-auto max-h-80">{texto}</pre>
-            <Button size="sm" variant="ghost" className="text-xs"
-              onClick={() => { navigator.clipboard?.writeText(texto); toast({ title: 'Resultado copiado' }); }}>
-              <Copy className="w-3 h-3 mr-1" />Copiar resultado
-            </Button>
-          </div>
-        )}
-      </CardContent>
-    </Card>
   );
 }
 

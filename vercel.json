@@ -1,0 +1,13 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "rewrites": [
+    {
+      "comment": "SPA: qualquer rota que não seja /api serve o index.html, senão recarregar em /ordens ou /login daria 404 (o roteamento é no navegador).",
+      "source": "/((?!api/).*)",
+      "destination": "/index.html"
+    }
+  ]
+}

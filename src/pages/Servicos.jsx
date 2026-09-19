@@ -10,6 +10,8 @@ import { Plus, Search, Wrench, Clock } from 'lucide-react';
 
 const EMPTY_SERVICE = {
   name: '', description: '', standard_time_hours: 1, labor_price: 0, category: '', code: '',
+  // Manutencao preventiva
+  interval_months: '', interval_km: '',
   // Fiscais (NFS-e / ISS municipal)
   service_code_lc116: '14.01', municipal_service_code: '', iss_rate: '', iss_retido: false, cnae: '',
 };
@@ -61,6 +63,9 @@ export default function Servicos() {
       labor_price: parseFloat(form.labor_price) || 0,
       standard_time_hours: parseFloat(form.standard_time_hours) || 1,
       iss_rate: form.iss_rate === '' ? 0 : (parseFloat(form.iss_rate) || 0),
+      // Vazio significa "nao se repete" — nao pode virar zero.
+      interval_months: form.interval_months === '' ? null : (parseFloat(form.interval_months) || null),
+      interval_km: form.interval_km === '' ? null : (parseFloat(form.interval_km) || null),
     };
     if (editId) await base44.entities.Service.update(editId, payload);
     else await base44.entities.Service.create(payload);
@@ -73,7 +78,10 @@ export default function Servicos() {
 
   const handleEdit = (svc) => {
     // Mescla com o padrão para serviços antigos, que não têm os campos fiscais
-    setForm({ ...EMPTY_SERVICE, ...svc, iss_rate: svc.iss_rate ?? '' });
+    setForm({ ...EMPTY_SERVICE, ...svc,
+      iss_rate: svc.iss_rate ?? '',
+      interval_months: svc.interval_months ?? '',
+      interval_km: svc.interval_km ?? '' });
     setEditId(svc.id);
     setShowForm(true);
   };
@@ -120,6 +128,28 @@ export default function Servicos() {
               <div className="col-span-2">
                 <label className="text-xs font-medium text-gray-600">Descrição</label>
                 <Input className="mt-1" value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} />
+              </div>
+            </div>
+
+            {/* Manutenção preventiva: alimenta o aviso de revisão */}
+            <div className="pt-3 mt-1 border-t">
+              <p className="text-xs font-semibold text-gray-700">Manutenção preventiva</p>
+              <p className="text-xs text-gray-400 mb-2">
+                De quanto em quanto tempo ou km este serviço precisa ser refeito. O
+                sistema avisa quando chegar perto — vence pelo que vier primeiro.
+                Deixe em branco se o serviço não se repete.
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-gray-600">Refazer a cada (meses)</label>
+                  <Input className="mt-1" type="number" min="0" step="1" value={form.interval_months}
+                    onChange={e => setForm(p => ({ ...p, interval_months: e.target.value }))} placeholder="Ex: 6" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600">Refazer a cada (km)</label>
+                  <Input className="mt-1" type="number" min="0" step="100" value={form.interval_km}
+                    onChange={e => setForm(p => ({ ...p, interval_km: e.target.value }))} placeholder="Ex: 5000" />
+                </div>
               </div>
             </div>
 

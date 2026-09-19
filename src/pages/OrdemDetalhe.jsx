@@ -10,12 +10,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, Printer, CreditCard, Package, Wrench, User, Car, Edit, Save, X, Plus, Trash2, Search, HardHat, FileText, Receipt } from 'lucide-react';
+import { ArrowLeft, Printer, CreditCard, Package, Wrench, User, Car, Edit, Save, X, Trash2, Search, HardHat, FileText, Receipt } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import PagamentoModal from '@/components/PagamentoModal';
 import EmitirNotaButton from '@/components/EmitirNotaButton';
 import { printDocument } from '@/components/PrintReceipt';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import RevisoesVeiculo from '@/components/RevisoesVeiculo';
 
 const STATUS_FLOW = ['aberta', 'em_andamento', 'aguardando_peca', 'finalizada'];
 
@@ -309,6 +310,13 @@ export default function OrdemDetalhe() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Revisões previstas deste veículo, a partir das OS já feitas */}
+      {vehicle?.id && (
+        <div className="mb-4">
+          <RevisoesVeiculo vehicleId={vehicle.id} kmAtual={order.vehicle_km ?? null} />
+        </div>
+      )}
 
       {/* Technician card (view mode) */}
       {technician && !editing && (

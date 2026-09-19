@@ -10,6 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Search, Package, Trash2, ShoppingCart, CheckCircle, Plus, Minus, CreditCard, PlusCircle, X } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import { pendenciasCrediario } from '@/lib/crm';
+import StatusCrediario from '@/components/StatusCrediario';
 
 const ALL_METHODS = [
   { value: 'dinheiro', label: 'Dinheiro' },
@@ -135,8 +137,17 @@ export default function PDV() {
     if (hasCrediario && !selectedCustomer) { toast({ title: 'Selecione o cliente para crediário', variant: 'destructive' }); return; }
     if (hasCrediario && selectedCustomer) {
       const cust = customers.find(c => c.id === selectedCustomer);
-      if (!cust?.tax_id || !cust?.name || !cust?.phone) {
-        toast({ title: 'Cadastro incompleto para crediário', description: 'O cliente precisa ter CPF, Nome completo e Telefone cadastrados.', variant: 'destructive' });
+      // A regra do crediário fica em lib/crm: CPF válido (com dígito
+      // verificador) e data de nascimento. A checagem antiga aceitava
+      // qualquer tax_id — inclusive CNPJ ou CPF digitado errado.
+      const faltas = pendenciasCrediario(cust);
+      if (!cust?.phone) faltas.push('Telefone não informado');
+      if (faltas.length) {
+        toast({
+          title: 'Cadastro incompleto para crediário',
+          description: faltas.join(' • '),
+          variant: 'destructive',
+        });
         return;
       }
     }
@@ -343,13 +354,13 @@ export default function PDV() {
                     ))}
                   </SelectContent>
                 </Select>
-                {hasCrediario && selectedCustomer && (() => {
-                  const cust = customers.find(c => c.id === selectedCustomer);
-                  const missing = [!cust?.tax_id && 'CPF', !cust?.phone && 'Telefone'].filter(Boolean);
-                  return missing.length > 0 ? (
-                    <p className="text-xs text-red-500 mt-1">⚠️ Faltam: {missing.join(', ')} no cadastro</p>
-                  ) : null;
-                })()}
+                {/* Avisa ANTES de tentar finalizar: o balconista corrige o
+                    cadastro sem perder a venda montada. */}
+                {hasCrediario && selectedCustomer && (
+                  <div className="mt-2">
+                    <StatusCrediario cliente={customers.find(c => c.id === selectedCustomer)} />
+                  </div>
+                )}
               </div>
 
               <div>

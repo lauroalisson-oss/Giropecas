@@ -12,9 +12,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { ArrowLeft, Save, Trash2 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import StatusCrediario from '@/components/StatusCrediario';
 
 const EMPTY = {
-  name: '', type: 'fisica', tax_id: '', phone: '', email: '',
+  name: '', type: 'fisica', tax_id: '', birth_date: '', phone: '', email: '',
   address: '', city: '', state: '', zip_code: '', credit_limit: 0,
   notes: '', is_active: true, lgpd_consent: false
 };
@@ -119,6 +120,11 @@ export default function ClienteForm() {
                   placeholder={form.type === 'juridica' ? '00.000.000/0000-00' : '000.000.000-00'} maxLength={form.type === 'juridica' ? 18 : 14} />
               </div>
               <div>
+                <Label>Data de nascimento</Label>
+                <Input className="mt-1" type="date" value={form.birth_date || ''}
+                  onChange={e => set('birth_date', e.target.value)} />
+              </div>
+              <div>
                 <Label>Telefone</Label>
                 <Input className="mt-1" value={form.phone}
                   onChange={e => set('phone', maskPhone(e.target.value))} placeholder="(00) 00000-0000" maxLength={15} />
@@ -160,6 +166,7 @@ export default function ClienteForm() {
         <Card>
           <CardHeader className="pb-3"><CardTitle className="text-sm">Crediário & Observações</CardTitle></CardHeader>
           <CardContent className="space-y-4">
+            <StatusCrediario cliente={form} />
             <div>
               <Label>Limite de Crédito (R$)</Label>
               <Input className="mt-1" type="number" min="0" value={form.credit_limit}

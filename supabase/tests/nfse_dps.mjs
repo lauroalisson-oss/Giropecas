@@ -1,5 +1,6 @@
-import { montarDps, codigoTributacaoNacional, dataHoraComFuso } from '/home/user/Giropecas/api/_lib/nfse-dps.js';
+import { montarDps, codigoTributacaoNacional, descricaoCTribNac, dataHoraComFuso } from '/home/user/Giropecas/api/_lib/nfse-dps.js';
 import { DOMParser } from '/home/user/Giropecas/node_modules/@xmldom/xmldom/lib/index.js';
+import TABELA from '/home/user/Giropecas/api/_lib/ctribnac.json' with { type: 'json' };
 
 let f=0; const ok=(c,m)=>{ if(!c){f++;console.log('FAIL:',m)} else console.log('ok:',m) };
 const tag=(xml,n)=>{ const m=xml.match(new RegExp(`<${n}>([^<]*)</${n}>`)); return m?m[1]:null; };
@@ -73,7 +74,24 @@ recusa(()=>montarDps({empresa:{...empresa,city_ibge_code:'123'},servicos,numero:
 
 console.log('--- Fuso em dhEmi ---');
 ok(/[+-]\d{2}:\d{2}$/.test(dataHoraComFuso(new Date())),'dhEmi termina com o fuso');
-ok(codigoTributacaoNacional('14.01')==='140100','codigo nacional derivado do item LC116');
+
+console.log('--- Codigo de tributacao nacional (tabela oficial) ---');
+// Derivar completando com '00' (14.01 -> 140100) dava codigo INEXISTENTE nos
+// 338 casos: toda nota seria rejeitada. Agora e consulta na tabela oficial.
+ok(codigoTributacaoNacional('14.01')==='140101','item 14.01 -> 140101 (conserto de veiculos)');
+ok(tag(r.xml,'cTribNac')==='140101','cTribNac da DPS sai da tabela oficial');
+ok(descricaoCTribNac('140101').includes('conserto'),'codigo tem descricao na tabela');
+ok(codigoTributacaoNacional('140101')==='140101','codigo de 6 digitos e aceito direto');
+ok(descricaoCTribNac('140100')===null,'140100 (o antigo derivado) nao existe');
+recusa(()=>codigoTributacaoNacional('140100'),'codigo inexistente');
+recusa(()=>codigoTributacaoNacional('10.01'),'item com varios desdobros (pede o codigo de 6 digitos)');
+recusa(()=>codigoTributacaoNacional('99.99'),'item que nao existe na LC 116');
+recusa(()=>codigoTributacaoNacional(''),'codigo em branco');
+// Nenhum codigo pode sair com desdobro '00': foi exatamente o erro anterior.
+const todos=Object.keys(TABELA);
+ok(todos.length===338,`tabela com 338 codigos (tem ${todos.length})`);
+ok(todos.every(c=>codigoTributacaoNacional(c)===c),'todos os 338 codigos da tabela sao aceitos');
+ok(!todos.some(c=>c.endsWith('00')),'nenhum codigo oficial termina em 00');
 
 console.log(f===0?'\n✅ GERADOR DA DPS OK':`\n❌ ${f} falha(s)`);
 process.exit(f?1:0);

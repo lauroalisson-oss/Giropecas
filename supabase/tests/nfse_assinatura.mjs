@@ -9,7 +9,7 @@ import { DOMParser } from '/home/user/Giropecas/node_modules/@xmldom/xmldom/lib/
 let f=0; const ok=(c,m)=>{ if(!c){f++;console.log('FAIL:',m)} else console.log('ok:',m) };
 
 console.log('--- 1. Ler o certificado .pfx ---');
-const pfx = fs.readFileSync('cert/teste.pfx');
+const pfx = _req('/home/user/Giropecas/supabase/tests/_cert_teste.cjs').garantir().pfx;
 const cert = lerCertificado(pfx, 'senha123');
 ok(cert.privateKeyPem.includes('PRIVATE KEY'),'extraiu a chave privada');
 ok(cert.certificateBase64.length > 500,'extraiu o certificado em base64');

@@ -23,7 +23,7 @@ ok(dps.xml.length>400,`XML gerado (${dps.xml.length} chars)`);
 console.log(`   ISS: R$ ${dps.iss.toFixed(2)} sobre R$ ${dps.total.toFixed(2)}`);
 
 console.log('2) Assinar com o certificado local');
-const cert=lerCertificado(fs.readFileSync('cert/teste.pfx'),'senha123');
+const cert=lerCertificado(_req('/home/user/Giropecas/supabase/tests/_cert_teste.cjs').garantir().pfx,'senha123');
 const assinado=assinarDps(dps.xml,cert,dps.id);
 ok(assinado.includes('Signature'),'assinado');
 

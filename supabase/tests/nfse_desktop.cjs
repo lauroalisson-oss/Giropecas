@@ -20,7 +20,7 @@ const cert=require('/home/user/Giropecas/desktop/nfse/certificado.js');
 const sefin=require('/home/user/Giropecas/desktop/nfse/sefin.js');
 
 let f=0; const ok=(c,m)=>{ if(!c){f++;console.log('FAIL:',m)} else console.log('ok:',m) };
-const PFX='/tmp/claude-0/-home-user-Giropecas/b6b16726-b9d1-5b89-b2b3-20f8d8148621/scratchpad/cert/teste.pfx';
+const PFX=require('./_cert_teste.cjs').garantir().arquivo;
 
 console.log('--- Situacao inicial ---');
 ok(cert.situacao().configurado===false,'sem certificado no inicio');

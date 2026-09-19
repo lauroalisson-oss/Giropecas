@@ -4,6 +4,8 @@
 // A ordem dos elementos dentro de infDPS é definida pelo XSD e NÃO pode
 // mudar — XML Schema valida sequência.
 
+import TABELA_CTRIBNAC from './ctribnac.json' with { type: 'json' };
+
 export const NS_NFSE = 'http://www.sped.fazenda.gov.br/nfse';
 
 // Monta o Id da DPS: 45 caracteres.
@@ -66,16 +68,45 @@ export function dataHoraComFuso(d = new Date()) {
 export const dataSimples = (d = new Date()) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-// Código de tributação nacional a partir do item da LC 116.
+// Código de tributação nacional (cTribNac), da tabela oficial de 338 códigos.
 //
-// ATENÇÃO: derivação por conveniência (14.01 -> 140101). O código oficial
-// vem da tabela nacional de serviços e PODE divergir para alguns itens.
-// Confirme com o contador antes de emitir em produção; por isso o serviço
-// pode gravar o código próprio em municipal_service_code.
+// Formato: item (2) + subitem (2) + desdobro nacional (2).
+//
+// Não dá para derivar do item da LC 116: o desdobro não segue regra. Uma
+// tentativa anterior completava com '00' (14.01 -> 140100) — e isso gerava
+// código INEXISTENTE nos 338 casos, ou seja, nenhuma nota seria aceita.
+// O correto para oficina é 140101 (conserto e manutenção de veículos).
 export function codigoTributacaoNacional(itemLc116) {
   const d = dig(itemLc116);
-  if (d.length >= 6) return d.slice(0, 6);
-  return d.padEnd(6, '0').slice(0, 6);
+
+  // Já veio o código completo de 6 dígitos.
+  if (d.length === 6) {
+    if (!TABELA_CTRIBNAC[d]) {
+      throw new Error(`Código de tributação nacional "${d}" não existe na tabela oficial.`);
+    }
+    return d;
+  }
+
+  // Veio o item da LC 116 (ex.: "14.01"): procura os desdobros existentes.
+  if (d.length === 4) {
+    const desdobros = Object.keys(TABELA_CTRIBNAC).filter(k => k.startsWith(d));
+    if (desdobros.length === 1) return desdobros[0];
+    if (desdobros.length > 1) {
+      throw new Error(
+        `O item ${itemLc116} tem mais de um código nacional (${desdobros.join(', ')}). `
+        + 'Informe o código de 6 dígitos no cadastro do serviço.',
+      );
+    }
+  }
+
+  throw new Error(
+    `Não foi possível determinar o código de tributação nacional a partir de "${itemLc116}". `
+    + 'Informe o código de 6 dígitos no cadastro do serviço (ex.: 140101 para conserto de veículos).',
+  );
+}
+
+export function descricaoCTribNac(codigo) {
+  return TABELA_CTRIBNAC[dig(codigo)] || null;
 }
 
 // Regime no Simples Nacional, conforme o cadastro da empresa.

@@ -12,7 +12,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { isSuperAdmin } from '@/lib/license';
 
 const CompanyContext = createContext(null);
-const CHAVE_SELECAO = 'motogestao_company_id';
+const CHAVE_SELECAO = 'giropecas_company_id';
 
 export function CompanyProvider({ children }) {
   const { user, isLoadingAuth } = useAuth();

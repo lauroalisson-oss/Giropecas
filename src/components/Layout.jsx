@@ -8,7 +8,7 @@ import {
   LayoutDashboard, Users, Car, Package, Wrench, ClipboardList,
   ShoppingCart, CreditCard, FileText, BarChart3, Settings,
   LogOut, Menu, X, Bell, ChevronDown, Truck, History, HardHat, KeyRound,
-  Wallet, TrendingUp, CalendarClock
+  Wallet, CalendarClock
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -80,7 +80,7 @@ export default function Layout() {
             <Wrench className="w-5 h-5 text-white" />
           </div>
           <div className="min-w-0">
-            <p className="text-white font-bold text-sm truncate">MotoGestão</p>
+            <p className="text-white font-bold text-sm truncate">GiroPeças</p>
             <p className="text-gray-400 text-xs truncate">{company?.name || 'Selecione empresa'}</p>
           </div>
           <button

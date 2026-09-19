@@ -55,18 +55,42 @@ Deno.serve(async (req) => {
     return 'node-forge disponível com pkcs12';
   });
 
+  // --- 2b. XMLDSig por biblioteca -----------------------------------------
+  // Canonicalização C14N escrita à mão é a causa clássica do erro E0714
+  // (digest divergente). xml-crypto faz isso corretamente; xmldom é a
+  // dependência de parsing dele. Se não importarem, sobra escrever C14N na
+  // unha — bem mais arriscado.
+  await registrar('xmldsig_xml_crypto', async () => {
+    const mod = await import('npm:xml-crypto@6.0.0');
+    const api = mod.default || mod;
+    if (!api?.SignedXml) throw new Error('xml-crypto importado, mas sem SignedXml');
+    return 'xml-crypto disponível com SignedXml';
+  });
+
+  await registrar('xmldsig_xmldom', async () => {
+    const mod = await import('npm:@xmldom/xmldom@0.9.6');
+    const api = mod.default || mod;
+    if (!api?.DOMParser) throw new Error('xmldom importado, mas sem DOMParser');
+    return 'xmldom disponível com DOMParser';
+  });
+
   // --- 3. Assinatura RSA-SHA256 (base do XMLDSig) -------------------------
-  await registrar('assinatura_rsa_sha256', async () => {
+  // A documentação diverge entre RSA-SHA1 e RSA-SHA256 para a DPS, então
+  // testamos os dois: se o padrão exigir SHA-1 e o runtime não suportar
+  // (alguns bloqueiam por ser obsoleto), isso também é impeditivo.
+  const testarAssinatura = (hash) => async () => {
     const par = await crypto.subtle.generateKey(
-      { name: 'RSASSA-PKCS1-v1_5', modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-256' },
+      { name: 'RSASSA-PKCS1-v1_5', modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash },
       true, ['sign', 'verify'],
     );
-    const dados = new TextEncoder().encode('<DPS>teste</DPS>');
+    const dados = new TextEncoder().encode('<infDPS>teste</infDPS>');
     const assinatura = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', par.privateKey, dados);
     const valida = await crypto.subtle.verify('RSASSA-PKCS1-v1_5', par.publicKey, assinatura, dados);
     if (!valida) throw new Error('assinatura gerada não confere na verificação');
-    return `assinatura RSA-SHA256 OK (${assinatura.byteLength} bytes)`;
-  });
+    return `RSA-${hash} OK (${assinatura.byteLength} bytes)`;
+  };
+  await registrar('assinatura_rsa_sha256', testarAssinatura('SHA-256'));
+  await registrar('assinatura_rsa_sha1', testarAssinatura('SHA-1'));
 
   // --- 4. GZip + Base64 ---------------------------------------------------
   await registrar('gzip_base64', async () => {

@@ -18,7 +18,13 @@ export const DURATION_OPTIONS = [
   { days: 365, code: 'G', label: '1 ano' },
 ];
 
+// A fonte da verdade é a flag no banco (profiles.is_super_admin), que a RLS
+// também usa. O e-mail fica só como reserva para o primeiro acesso, antes de
+// o perfil existir — comparar e-mail é frágil: quem criar conta com esse
+// endereço viraria super-admin.
 export function isSuperAdmin(user) {
+  if (user?.is_super_admin === true) return true;
+  if (user?.is_super_admin === false) return false;
   return (user?.email || '').trim().toLowerCase() === SUPER_ADMIN_EMAIL;
 }
 

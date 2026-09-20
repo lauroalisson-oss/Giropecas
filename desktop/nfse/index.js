@@ -7,8 +7,8 @@
 const { ipcMain } = require('electron');
 const certificado = require('./certificado');
 const config = require('../config');
-const { assinarDps, compactarParaEnvio } = require('./assinatura');
-const { enviarDps, consultarNfse } = require('./sefin');
+const { assinarDps, assinarEvento, compactarParaEnvio } = require('./assinatura');
+const { enviarDps, consultarNfse, enviarEvento, consultarDps } = require('./sefin');
 
 // Converte exceção em resposta previsível, para a tela sempre ter o que
 // mostrar — e confere, a cada chamada, de qual endereço veio o pedido.
@@ -60,6 +60,36 @@ function registrar() {
       xmlDpsAssinada: assinado,
       ambiente: producao ? 'producao' : 'homologacao',
     };
+  }));
+
+  // --- Cancelamento ---
+  // Recebe o pedido de evento já montado (pela nuvem), assina e envia.
+  // Cancelar não apaga a nota: registra um evento ligado a ela.
+  ipcMain.handle('nfse:cancelar', protegido(async ({ xmlEvento, idInfPedReg, chaveAcesso, producao = false, senha = null }) => {
+    if (!xmlEvento) throw new Error('Pedido de cancelamento não informado.');
+    if (!chaveAcesso) throw new Error('Chave de acesso da nota não informada.');
+
+    const { pfx, senha: senhaCert, info } = certificado.carregar(senha);
+    const assinado = assinarEvento(xmlEvento, info, idInfPedReg);
+    const pedidoXmlGZipB64 = compactarParaEnvio(assinado);
+
+    const resultado = await enviarEvento({ chaveAcesso, pedidoXmlGZipB64, pfx, senha: senhaCert, producao });
+    if (!resultado.ok) {
+      const err = new Error(resultado.erro);
+      err.codigos = resultado.codigos;
+      throw err;
+    }
+    return { ...resultado, xmlEventoAssinado: assinado };
+  }));
+
+  // Pergunta ao Sefin se uma DPS já virou nota — para a emissão que caiu
+  // no meio e deixou a nota presa em "validando".
+  ipcMain.handle('nfse:consultar-dps', protegido(async ({ idDps, producao = false, senha = null }) => {
+    if (!idDps) throw new Error('Id da DPS não informado.');
+    const { pfx, senha: senhaCert } = certificado.carregar(senha);
+    const r = await consultarDps({ idDps, pfx, senha: senhaCert, producao });
+    if (!r.ok) throw new Error(r.erro);
+    return r;
   }));
 
   ipcMain.handle('nfse:consultar', protegido(async ({ chaveAcesso, producao = false, senha = null }) => {

@@ -101,13 +101,19 @@ function montarIdDps({ codigoMunicipio, cnpjCpf, serie, numero }) {
 }
 
 // Assina o <infDPS> e insere a <Signature> como último filho do <DPS>.
-function assinarDps(xmlDps, { privateKeyPem, certificateBase64 }, idInfDps) {
-  const doc = new DOMParser().parseFromString(xmlDps, 'text/xml');
-  const infDps = doc.getElementsByTagName('infDPS')[0];
-  if (!infDps) throw new Error('XML da DPS sem elemento infDPS.');
+// Assinatura XMLDSig de qualquer elemento com Id — a DPS e o pedido de
+// evento seguem o mesmo mecanismo, só muda o elemento referenciado.
+//
+// A armadilha do E0714 vale para os dois: a referência tem de apontar
+// para o Id e a canonicalização tem de ser a C14N, senão o digest que o
+// governo calcula não bate com o nosso.
+function assinarElemento(xml, { privateKeyPem, certificateBase64 }, nomeElemento, idInformado) {
+  const doc = new DOMParser().parseFromString(xml, 'text/xml');
+  const alvo = doc.getElementsByTagName(nomeElemento)[0];
+  if (!alvo) throw new Error(`XML sem elemento ${nomeElemento}.`);
 
-  const id = idInfDps || infDps.getAttribute('Id');
-  if (!id) throw new Error('infDPS sem atributo Id — a assinatura precisa referenciá-lo.');
+  const id = idInformado || alvo.getAttribute('Id');
+  if (!id) throw new Error(`${nomeElemento} sem atributo Id — a assinatura precisa referenciá-lo.`);
 
   const sig = new SignedXml({
     privateKey: privateKeyPem,
@@ -117,7 +123,7 @@ function assinarDps(xmlDps, { privateKeyPem, certificateBase64 }, idInfDps) {
   });
 
   sig.addReference({
-    xpath: `//*[local-name(.)='infDPS']`,
+    xpath: `//*[local-name(.)='${nomeElemento}']`,
     digestAlgorithm: 'http://www.w3.org/2001/04/xmlenc#sha256',
     transforms: [
       'http://www.w3.org/2000/09/xmldsig#enveloped-signature',
@@ -126,12 +132,20 @@ function assinarDps(xmlDps, { privateKeyPem, certificateBase64 }, idInfDps) {
     uri: `#${id}`,
   });
 
-  // A Signature entra dentro de <DPS>, depois de <infDPS> — enveloped.
-  sig.computeSignature(xmlDps, {
-    location: { reference: `//*[local-name(.)='infDPS']`, action: 'after' },
+  sig.computeSignature(xml, {
+    location: { reference: `//*[local-name(.)='${nomeElemento}']`, action: 'after' },
   });
 
   return sig.getSignedXml();
+}
+
+// Assina o pedido de registro de evento (cancelamento).
+function assinarEvento(xmlEvento, certificado, idInfPedReg) {
+  return assinarElemento(xmlEvento, certificado, 'infPedReg', idInfPedReg);
+}
+
+function assinarDps(xmlDps, certificado, idInfDps) {
+  return assinarElemento(xmlDps, certificado, 'infDPS', idInfDps);
 }
 
 // O Sefin recebe o XML assinado compactado em GZip e codificado em Base64.
@@ -139,4 +153,12 @@ function compactarParaEnvio(xmlAssinado) {
   return gzipSync(Buffer.from(xmlAssinado, 'utf8')).toString('base64');
 }
 
-module.exports = { NS_NFSE, lerCertificado, montarIdDps, assinarDps, compactarParaEnvio };
+module.exports = {
+  NS_NFSE,
+  lerCertificado,
+  montarIdDps,
+  assinarElemento,
+  assinarDps,
+  assinarEvento,
+  compactarParaEnvio,
+};

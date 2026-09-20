@@ -6,14 +6,20 @@ import { formatCurrency, formatDateTime } from '@/lib/formatters';
 import { NFE_STATUS_LABEL, NFE_STATUS_COLOR } from '@/lib/fiscal';
 import {
   baixarXml, consultarNaSefin, liberarNotaPresa, temPonteDesktop,
-  pendenciasNfse, nfseNoMes, MODELO_LABEL,
+  pendenciasNfse, nfseNoMes, idDpsDaNota, MODELO_LABEL,
+  cancelarNfse, verificarNotaPresa, MOTIVOS_CANCELAMENTO,
 } from '@/lib/nfse';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
+} from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import {
   FileText, AlertCircle, CheckCircle, Clock, Info, RefreshCw, Gauge,
-  Download, Copy, Monitor, Unlock,
+  Download, Copy, Monitor, Unlock, Ban, Search, Loader2,
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils';
@@ -25,6 +31,10 @@ export default function NFe() {
   const [nfes, setNfes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [ocupado, setOcupado] = useState(null);
+  const [cancelando, setCancelando] = useState(null); // nota em cancelamento
+  const [motivo, setMotivo] = useState('1');
+  const [justificativa, setJustificativa] = useState('');
+  const [etapa, setEtapa] = useState('');
 
   const noDesktop = temPonteDesktop();
 
@@ -85,6 +95,58 @@ export default function NFe() {
       loadNFes();
     } catch (e) {
       toast({ title: 'Não foi possível liberar', description: e.message, variant: 'destructive' });
+    } finally {
+      setOcupado(null);
+    }
+  };
+
+  const confirmarCancelamento = async () => {
+    setEtapa('Montando o pedido...');
+    try {
+      await cancelarNfse({
+        nfeId: cancelando.id,
+        motivo: Number(motivo),
+        justificativa,
+      }, setEtapa);
+      toast({
+        title: 'NFS-e cancelada',
+        description: 'O cancelamento foi registrado no Sefin.',
+      });
+      setCancelando(null);
+      setJustificativa('');
+      loadNFes();
+    } catch (e) {
+      toast({ title: 'Não foi possível cancelar', description: e.message, variant: 'destructive' });
+    } finally {
+      setEtapa('');
+    }
+  };
+
+  // Pergunta ao Sefin se a nota presa existe de verdade, em vez de
+  // deixar a oficina escolher no escuro entre emitir de novo (com risco
+  // de duplicidade) e ficar sem nota.
+  const verificar = async (nota) => {
+    const idDps = idDpsDaNota(nota);
+    if (!idDps) {
+      toast({
+        title: 'Sem o Id da DPS',
+        description: 'Esta nota não guardou o XML do rascunho. Use "Liberar" para tentar de novo.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    setOcupado(nota.id);
+    try {
+      const r = await verificarNotaPresa({
+        nfeId: nota.id, idDps,
+        producao: company?.nfe_environment === 'producao',
+      });
+      toast(r.existe
+        ? { title: 'A nota existe no Sefin', description: `Chave ${r.chaveAcesso}. O registro foi atualizado.` }
+        : { title: 'A nota não foi gerada', description: 'Liberada — pode emitir esta OS de novo.' });
+      loadNFes();
+    } catch (e) {
+      toast({ title: 'Não foi possível verificar', description: e.message, variant: 'destructive' });
     } finally {
       setOcupado(null);
     }
@@ -308,11 +370,25 @@ export default function NFe() {
                               Consultar
                             </Button>
                           )}
+                          {presa && noDesktop && (
+                            <Button size="sm" variant="ghost"
+                              className="h-7 px-2 text-xs text-blue-700 hover:bg-blue-50"
+                              disabled={ocupado === nota.id} onClick={() => verificar(nota)}>
+                              <Search className="w-3 h-3 mr-1" />Verificar no Sefin
+                            </Button>
+                          )}
                           {presa && (
                             <Button size="sm" variant="ghost"
                               className="h-7 px-2 text-xs text-amber-700 hover:bg-amber-50"
                               disabled={ocupado === nota.id} onClick={() => liberar(nota)}>
                               <Unlock className="w-3 h-3 mr-1" />Liberar
+                            </Button>
+                          )}
+                          {ehNfse && nota.status === 'autorizada' && noDesktop && (
+                            <Button size="sm" variant="ghost"
+                              className="h-7 px-2 text-xs text-red-600 hover:bg-red-50"
+                              onClick={() => { setCancelando(nota); setMotivo('1'); setJustificativa(''); }}>
+                              <Ban className="w-3 h-3 mr-1" />Cancelar
                             </Button>
                           )}
                         </div>
@@ -324,6 +400,60 @@ export default function NFe() {
             })}
           </div>
         )}
+
+      <Dialog open={!!cancelando} onOpenChange={() => { if (!etapa) setCancelando(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <Ban className="w-5 h-5" />Cancelar NFS-e
+            </DialogTitle>
+            <DialogDescription className="pt-1">
+              O cancelamento não apaga a nota: registra um evento ligado a ela.
+              A nota continua no histórico, marcada como cancelada.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-1">
+            <div>
+              <Label className="text-xs">Motivo</Label>
+              <select value={motivo} onChange={e => setMotivo(e.target.value)}
+                className="mt-1 w-full h-10 px-3 border rounded-md text-sm bg-white">
+                {Object.entries(MOTIVOS_CANCELAMENTO).map(([cod, texto]) => (
+                  <option key={cod} value={cod}>{texto}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <Label className="text-xs">Justificativa</Label>
+              <Textarea className="mt-1" rows={3} value={justificativa}
+                onChange={e => setJustificativa(e.target.value)}
+                placeholder="Explique o que houve — fica registrado no Sefin." />
+              <p className={cn('text-xs mt-1',
+                justificativa.trim().length < 15 ? 'text-amber-600' : 'text-gray-400')}>
+                {justificativa.trim().length < 15
+                  ? `Faltam ${15 - justificativa.trim().length} caractere(s) — o Sefin exige ao menos 15.`
+                  : `${justificativa.trim().length}/255 caracteres`}
+              </p>
+            </div>
+            {cancelando?.number && (
+              <p className="text-xs text-gray-500 font-mono break-all">
+                Nota {cancelando.number}
+              </p>
+            )}
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" disabled={!!etapa}
+              onClick={() => setCancelando(null)}>Voltar</Button>
+            <Button className="bg-red-600 hover:bg-red-700 text-white"
+              disabled={!!etapa || justificativa.trim().length < 15 || justificativa.trim().length > 255}
+              onClick={confirmarCancelamento}>
+              {etapa ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Ban className="w-4 h-4 mr-2" />}
+              {etapa || 'Cancelar a nota'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

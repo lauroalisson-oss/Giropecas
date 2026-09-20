@@ -33,7 +33,7 @@ const navItems = [
   { path: '/contas-pagar', label: 'Contas a Pagar', icon: Wallet },
   { path: '/compras', label: 'Compras', icon: ShoppingCart },
   { path: '/fornecedores', label: 'Fornecedores', icon: Truck },
-  { path: '/nfe', label: 'NF-e', icon: FileText },
+  { path: '/nfe', label: 'Notas Fiscais', icon: FileText },
   { path: '/historico', label: 'Histórico', icon: History },
   { path: '/relatorios', label: 'Relatórios', icon: BarChart3 },
   { path: '/configuracoes', label: 'Configurações', icon: Settings },

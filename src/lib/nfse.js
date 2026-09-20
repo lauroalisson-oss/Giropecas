@@ -17,6 +17,7 @@
 // para o provedor, nem para lugar nenhum.
 
 import { base44 } from '@/api/base44Client';
+export { pendenciasNfse, nfseNoMes, MODELO_LABEL } from './nfse-dados';
 
 // A ponte é injetada pelo aplicativo desktop (preload.js). Num navegador
 // comum ela simplesmente não existe.
@@ -108,4 +109,45 @@ export async function emitirNfse(workOrderId, onEtapa = () => {}) {
     iss: preparo.iss,
     ambiente: resposta.dados.ambiente,
   };
+}
+
+// Reconsulta uma nota no Sefin pela chave de acesso. Também depende da
+// ponte: a consulta usa a mesma conexão autenticada por certificado.
+export async function consultarNaSefin(chaveAcesso, producao = false) {
+  const ponte = ponteDesktop();
+  if (!ponte) throw new Error(AVISO_SEM_PONTE);
+  const r = await ponte.consultar({ chaveAcesso, producao });
+  if (!r?.ok) throw new Error(r?.erro || 'Não foi possível consultar a nota.');
+  return r.dados;
+}
+
+// Baixa o XML da nota. É o arquivo que o contador precisa — e o que vale
+// como documento, por ser o que o governo assinou e devolveu.
+export function baixarXml(nota) {
+  if (!nota?.xml_content) throw new Error('Esta nota não tem XML guardado.');
+  const nome = `NFSe-${nota.number || nota.rps_number || nota.id.slice(-6)}.xml`;
+  const url = URL.createObjectURL(new Blob([nota.xml_content], { type: 'application/xml' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = nome;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // Devolve a memória do blob depois que o navegador começou o download.
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+  return nome;
+}
+
+// Marca como não emitida uma nota que ficou presa em "validando" — quando
+// a transmissão caiu no meio e a tela não recebeu resposta.
+//
+// Não mexe no Sefin: se a nota tiver sido gerada lá apesar da queda, a
+// próxima tentativa é recusada como DPS repetida, e a mensagem do governo
+// diz isso. É melhor errar para esse lado do que dar por emitida uma nota
+// que não existe.
+export async function liberarNotaPresa(nfeId) {
+  await base44.functions.invoke('nfseRegistrar', {
+    nfe_id: nfeId,
+    erro: 'Transmissão interrompida — a nota não chegou a ser confirmada pelo Sefin.',
+  });
 }

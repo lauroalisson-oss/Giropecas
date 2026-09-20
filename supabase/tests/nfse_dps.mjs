@@ -1,6 +1,6 @@
 import { montarDps, codigoTributacaoNacional, descricaoCTribNac, dataHoraComFuso } from '/home/user/Giropecas/api/_lib/nfse-dps.js';
 import { DOMParser } from '/home/user/Giropecas/node_modules/@xmldom/xmldom/lib/index.js';
-import TABELA from '/home/user/Giropecas/api/_lib/ctribnac.json' with { type: 'json' };
+import TABELA from '/home/user/Giropecas/shared/ctribnac.json' with { type: 'json' };
 
 let f=0; const ok=(c,m)=>{ if(!c){f++;console.log('FAIL:',m)} else console.log('ok:',m) };
 const tag=(xml,n)=>{ const m=xml.match(new RegExp(`<${n}>([^<]*)</${n}>`)); return m?m[1]:null; };

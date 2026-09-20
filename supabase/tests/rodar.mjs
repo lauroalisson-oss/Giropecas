@@ -54,8 +54,14 @@ if (falharam.length) {
   console.log(`\n✅ ${passaram} suítes passaram`);
 }
 if (puladas.length) {
-  console.log(`⏭  ${puladas.length} pulada(s): ${puladas.join(', ')} — testam o banco de verdade`);
-  console.log('   Enquanto estiverem puladas, RLS e adaptador não estão sendo conferidos.');
+  console.log(`⏭  ${puladas.length} pulada(s): ${puladas.join(', ')} — entram no banco como um lojista de verdade`);
+  console.log('   Precisam de usuários de teste; sem eles, o login e o adaptador não são conferidos.');
 }
+
+// A RLS é conferida por supabase/tests/rls.sql, que roda no SQL Editor
+// do Supabase (precisa do banco). Lembrar aqui evita que ela fique
+// esquecida só porque não cabe neste runner.
+console.log('\nℹ  Isolamento entre oficinas (RLS): rode supabase/tests/rls.sql');
+console.log('   no SQL Editor do Supabase. Ele cria, confere e desfaz — não grava nada.');
 
 process.exit(falharam.length ? 1 : 0);

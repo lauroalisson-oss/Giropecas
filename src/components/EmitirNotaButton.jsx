@@ -18,12 +18,17 @@ import { emitirNota, fiscalIssues, NFE_STATUS_LABEL } from '@/lib/fiscal';
 //   items                 — itens da venda/OS (para pré-checagem de NCM)
 //   partsById             — mapa id -> Part (com ncm) para a pré-checagem
 //   size, onEmitted
+// Vira `true` quando a emissão de nota de peça for religada no servidor
+// (rota própria em /api, no lugar da backend function do Base44).
+const EMISSAO_PECA_ATIVA = false;
+
 export default function EmitirNotaButton({ saleId, workOrderId, items, partsById, size = 'sm', onEmitted }) {
   const { company } = useCompany();
   const { isFiscal } = useLicense();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [pending, setPending] = useState(null); // { tipo, issues }
+  const [indisponivel, setIndisponivel] = useState(null); // 'nfe' | 'nfce'
 
   // Só aparece quando a licença ativa é do plano Fiscal
   if (!isFiscal) return null;
@@ -39,6 +44,15 @@ export default function EmitirNotaButton({ saleId, workOrderId, items, partsById
 
   const doEmit = async (tipo) => {
     setPending(null);
+    // NF-e/NFC-e de PEÇA ainda não foi religada depois da migração: a
+    // emissão dependia de backend functions do Base44, que não existem
+    // mais. Avisar é melhor do que deixar estourar um "HTTP 404" na cara
+    // do lojista no meio do atendimento.
+    if (!EMISSAO_PECA_ATIVA) {
+      setPending(null);
+      setIndisponivel(tipo);
+      return;
+    }
     setLoading(true);
     try {
       const result = await emitirNota({ tipo, saleId, workOrderId });
@@ -105,6 +119,31 @@ export default function EmitirNotaButton({ saleId, workOrderId, items, partsById
             <Button className="bg-amber-600 hover:bg-amber-700 text-white" onClick={() => doEmit(pending.tipo)}>
               Emitir mesmo assim
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!indisponivel} onOpenChange={() => setIndisponivel(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-slate-700">
+              <AlertTriangle className="w-5 h-5" />
+              {indisponivel === 'nfce' ? 'NFC-e' : 'NF-e'} ainda não disponível
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2 text-sm text-gray-600">
+            <p>
+              A emissão de nota de <strong>peça</strong> ({indisponivel === 'nfce' ? 'NFC-e' : 'NF-e'})
+              ainda não foi religada nesta versão do sistema.
+            </p>
+            <p>
+              A nota de <strong>serviço (NFS-e)</strong> já funciona: use o botão
+              <strong> Emitir NFS-e</strong> na ordem de serviço, pelo aplicativo instalado
+              no computador da oficina.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIndisponivel(null)}>Entendi</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

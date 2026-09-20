@@ -1,13 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useCompany } from '@/lib/CompanyContext';
 import { useLicense } from '@/lib/LicenseContext';
 import { formatCurrency, formatDateTime } from '@/lib/formatters';
-import { consultarNota, notesThisMonth, NFE_STATUS_LABEL, NFE_STATUS_COLOR } from '@/lib/fiscal';
+import { NFE_STATUS_LABEL, NFE_STATUS_COLOR } from '@/lib/fiscal';
+import {
+  baixarXml, consultarNaSefin, liberarNotaPresa, temPonteDesktop,
+  pendenciasNfse, nfseNoMes, MODELO_LABEL,
+} from '@/lib/nfse';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
-import { FileText, AlertCircle, CheckCircle, Clock, Info, RefreshCw, Gauge } from 'lucide-react';
+import {
+  FileText, AlertCircle, CheckCircle, Clock, Info, RefreshCw, Gauge,
+  Download, Copy, Monitor, Unlock,
+} from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils';
 
@@ -17,7 +24,9 @@ export default function NFe() {
   const { toast } = useToast();
   const [nfes, setNfes] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [checking, setChecking] = useState(null);
+  const [ocupado, setOcupado] = useState(null);
+
+  const noDesktop = temPonteDesktop();
 
   useEffect(() => { if (company?.id) loadNFes(); }, [company]);
 
@@ -28,37 +37,80 @@ export default function NFe() {
     setLoading(false);
   };
 
-  const handleCheck = async (nfeId) => {
-    setChecking(nfeId);
+  const consultar = async (nota) => {
+    setOcupado(nota.id);
     try {
-      const result = await consultarNota(nfeId);
-      toast({ title: `Status: ${NFE_STATUS_LABEL[result.status] || result.status}` });
-      loadNFes();
+      const r = await consultarNaSefin(nota.number, company?.nfe_environment === 'producao');
+      toast({
+        title: 'Nota encontrada no Sefin',
+        description: `Situação confirmada para a chave ${nota.number}.`,
+      });
+      if (r?.xmlNfse && !nota.xml_content) {
+        await base44.entities.NFeRecord.update(nota.id, { xml_content: r.xmlNfse });
+        loadNFes();
+      }
     } catch (e) {
-      toast({ title: 'Erro ao consultar', description: e.message, variant: 'destructive' });
+      toast({ title: 'Não foi possível consultar', description: e.message, variant: 'destructive' });
     } finally {
-      setChecking(null);
+      setOcupado(null);
     }
   };
 
-  const nfeStatusColor = (status) => NFE_STATUS_COLOR[status] || 'bg-gray-100 text-gray-700';
-  const nfeStatusLabel = (status) => NFE_STATUS_LABEL[status] || status;
+  const baixar = (nota) => {
+    try {
+      const nome = baixarXml(nota);
+      toast({ title: 'XML baixado', description: nome });
+    } catch (e) {
+      toast({ title: 'Sem XML para baixar', description: e.message, variant: 'destructive' });
+    }
+  };
 
-  const isFiscalPlan = isFiscal;
+  const copiarChave = async (chave) => {
+    try {
+      await navigator.clipboard.writeText(chave);
+      toast({ title: 'Chave copiada' });
+    } catch {
+      toast({ title: 'Não foi possível copiar', description: chave, variant: 'destructive' });
+    }
+  };
+
+  const liberar = async (nota) => {
+    setOcupado(nota.id);
+    try {
+      await liberarNotaPresa(nota.id);
+      toast({
+        title: 'Nota liberada',
+        description: 'Você já pode tentar emitir a NFS-e desta OS novamente.',
+      });
+      loadNFes();
+    } catch (e) {
+      toast({ title: 'Não foi possível liberar', description: e.message, variant: 'destructive' });
+    } finally {
+      setOcupado(null);
+    }
+  };
+
+  // O medidor conta o mesmo que o servidor bloqueia: NFS-e autorizada no
+  // mês corrente. Contar diferente aqui faria o lojista ver folga onde o
+  // servidor já recusa.
+  const usadasNoMes = useMemo(() => nfseNoMes(nfes), [nfes]);
+
   const noteLimit = Number.isFinite(planNoteLimit) ? planNoteLimit : (company?.fiscal_note_limit || 100);
-  const usedThisMonth = notesThisMonth(nfes);
-  const limitReached = usedThisMonth >= noteLimit;
-  const nearLimit = usedThisMonth >= noteLimit * 0.9;
+  const limitReached = usadasNoMes >= noteLimit;
+  const nearLimit = usadasNoMes >= noteLimit * 0.9;
+  const pendencias = pendenciasNfse(company);
+
+  const statusColor = (s) => NFE_STATUS_COLOR[s] || 'bg-gray-100 text-gray-700';
+  const statusLabel = (s) => NFE_STATUS_LABEL[s] || s;
 
   return (
     <div className="p-4 lg:p-6 pb-20 lg:pb-6">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">NF-e</h1>
-        <p className="text-gray-500 text-sm">Notas Fiscais Eletrônicas</p>
+        <h1 className="text-2xl font-bold text-gray-900">Notas Fiscais</h1>
+        <p className="text-gray-500 text-sm">NFS-e — nota de serviço da oficina</p>
       </div>
 
-      {/* Plano Não-Fiscal */}
-      {!isFiscalPlan && (
+      {!isFiscal && (
         <Card className="mb-6 border-slate-200 bg-slate-50">
           <CardContent className="p-4">
             <div className="flex items-start gap-3">
@@ -66,8 +118,8 @@ export default function NFe() {
               <div>
                 <p className="font-semibold text-slate-800">Plano Não-Fiscal</p>
                 <p className="text-sm text-slate-600 mt-1">
-                  Sua empresa está no plano <strong>Não-Fiscal</strong>, que não inclui emissão de notas.
-                  Para emitir NFC-e/NF-e, contrate o <strong>plano Fiscal</strong> com o suporte.
+                  Sua oficina está no plano <strong>Não-Fiscal</strong>, que não inclui emissão de notas.
+                  Para emitir NFS-e, fale com o provedor sobre o <strong>plano Fiscal</strong>.
                 </p>
               </div>
             </div>
@@ -75,60 +127,94 @@ export default function NFe() {
         </Card>
       )}
 
-      {/* Medidor de notas do mês (plano fiscal) */}
-      {isFiscalPlan && (
-        <Card className={cn('mb-6', limitReached ? 'border-red-200 bg-red-50' : nearLimit ? 'border-orange-200 bg-orange-50' : 'border-gray-200')}>
-          <CardContent className="p-4">
-            <div className="flex items-start gap-3">
-              <Gauge className={cn('w-5 h-5 mt-0.5 flex-shrink-0', limitReached ? 'text-red-600' : nearLimit ? 'text-orange-600' : 'text-gray-500')} />
-              <div className="flex-1">
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <p className="font-semibold text-gray-800">Notas emitidas neste mês</p>
-                  <span className={cn('font-bold', limitReached ? 'text-red-600' : nearLimit ? 'text-orange-600' : 'text-gray-700')}>
-                    {usedThisMonth} / {noteLimit}
-                  </span>
+      {isFiscal && (
+        <>
+          <Card className={cn('mb-4', limitReached ? 'border-red-200 bg-red-50'
+            : nearLimit ? 'border-orange-200 bg-orange-50' : 'border-gray-200')}
+          >
+            <CardContent className="p-4">
+              <div className="flex items-start gap-3">
+                <Gauge className={cn('w-5 h-5 mt-0.5 flex-shrink-0', limitReached ? 'text-red-600'
+                  : nearLimit ? 'text-orange-600' : 'text-gray-500')} />
+                <div className="flex-1">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <p className="font-semibold text-gray-800">NFS-e emitidas neste mês</p>
+                    <span className={cn('font-bold', limitReached ? 'text-red-600'
+                      : nearLimit ? 'text-orange-600' : 'text-gray-700')}>
+                      {usadasNoMes} / {noteLimit}
+                    </span>
+                  </div>
+                  <div className="mt-2 h-2 bg-gray-200 rounded-full overflow-hidden">
+                    <div className={cn('h-full rounded-full', limitReached ? 'bg-red-500'
+                      : nearLimit ? 'bg-orange-500' : 'bg-green-500')}
+                      style={{ width: `${Math.min(100, (usadasNoMes / noteLimit) * 100)}%` }} />
+                  </div>
+                  {limitReached ? (
+                    <p className="text-sm text-red-700 mt-2">
+                      Limite do mês atingido — a emissão está bloqueada. Peça ao provedor
+                      para aumentar o limite do seu plano.
+                    </p>
+                  ) : nearLimit ? (
+                    <p className="text-sm text-orange-700 mt-2">
+                      Perto do limite mensal. Ao chegar a {noteLimit}, a emissão é bloqueada
+                      até o provedor liberar mais notas.
+                    </p>
+                  ) : null}
                 </div>
-                <div className="mt-2 h-2 bg-gray-200 rounded-full overflow-hidden">
-                  <div className={cn('h-full rounded-full', limitReached ? 'bg-red-500' : nearLimit ? 'bg-orange-500' : 'bg-green-500')}
-                    style={{ width: `${Math.min(100, (usedThisMonth / noteLimit) * 100)}%` }} />
-                </div>
-                {limitReached ? (
-                  <p className="text-sm text-red-700 mt-2">
-                    Limite do plano atingido. Notas adicionais custam <strong>R$ 2,00 cada</strong> —
-                    entre em contato com o suporte para liberar mais notas ou negociar seu plano.
-                  </p>
-                ) : nearLimit ? (
-                  <p className="text-sm text-orange-700 mt-2">
-                    Você está perto do limite mensal. Ao atingir {noteLimit}, a emissão é bloqueada
-                    (notas extras: R$ 2,00 cada, mediante contato com o suporte).
-                  </p>
-                ) : null}
               </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+            </CardContent>
+          </Card>
 
-      {/* Module status banner */}
-      {isFiscalPlan && !company?.nfe_enabled && (
-        <Card className="mb-6 border-yellow-200 bg-yellow-50">
-          <CardContent className="p-4">
-            <div className="flex items-start gap-3">
-              <Info className="w-5 h-5 text-yellow-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="font-semibold text-yellow-800">Módulo Fiscal desativado</p>
-                <p className="text-sm text-yellow-700 mt-1">
-                  Para emitir NFC-e (balcão) e NF-e, ative o módulo em
-                  <strong> Configurações → Fiscal &amp; NF-e</strong> e conclua a configuração do provedor fiscal.
-                  O passo a passo completo está em <code>docs/NOTA-FISCAL.md</code>.
+          {pendencias.length > 0 && (
+            <Card className="mb-4 border-amber-200 bg-amber-50">
+              <CardContent className="p-4">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                  <div className="text-sm">
+                    <p className="font-semibold text-amber-800">Cadastro fiscal incompleto</p>
+                    <p className="text-amber-700 mt-1">
+                      O Sefin recusa a nota sem estes dados: <strong>{pendencias.join(', ')}</strong>.
+                    </p>
+                    <p className="text-amber-700 mt-1">
+                      Preencha em <strong>Configurações → Fiscal</strong>.
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {!noDesktop && (
+            <Card className="mb-4 border-blue-200 bg-blue-50">
+              <CardContent className="p-4">
+                <div className="flex items-start gap-3">
+                  <Monitor className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                  <div className="text-sm">
+                    <p className="font-semibold text-blue-900">Você está no navegador</p>
+                    <p className="text-blue-800 mt-1">
+                      Dá para consultar as notas aqui, mas <strong>emitir</strong> só pelo aplicativo
+                      Giropeças instalado no computador da oficina — é lá que fica o certificado digital.
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {company?.nfe_environment !== 'producao' && (
+            <Card className="mb-6 border-purple-200 bg-purple-50">
+              <CardContent className="p-3">
+                <p className="text-sm text-purple-800">
+                  <strong>Ambiente de homologação (teste).</strong> As notas emitidas aqui
+                  não têm valor fiscal. Mude para produção em Configurações → Fiscal quando
+                  tudo estiver conferido.
                 </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+              </CardContent>
+            </Card>
+          )}
+        </>
       )}
 
-      {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {[
           { label: 'Total', value: nfes.length, icon: FileText, color: 'text-gray-600', bg: 'bg-gray-100' },
@@ -150,47 +236,94 @@ export default function NFe() {
         ))}
       </div>
 
-      {loading ? <div className="text-center py-12 text-gray-400">Carregando...</div> :
-        nfes.length === 0 ? (
+      {loading ? <div className="text-center py-12 text-gray-400">Carregando...</div>
+        : nfes.length === 0 ? (
           <div className="text-center py-16">
             <FileText className="w-14 h-14 text-gray-200 mx-auto mb-4" />
-            <p className="text-gray-500 mb-2">Nenhuma NF-e emitida</p>
-            <p className="text-gray-400 text-sm">As NF-e serão criadas a partir da finalização de OS ou vendas</p>
+            <p className="text-gray-500 mb-2">Nenhuma nota emitida</p>
+            <p className="text-gray-400 text-sm">
+              A NFS-e é emitida pelo botão <strong>Emitir NFS-e</strong> na ordem de serviço.
+            </p>
           </div>
         ) : (
           <div className="space-y-2">
-            {nfes.map(nfe => (
-              <Card key={nfe.id} className="hover:shadow-sm transition-shadow">
-                <CardContent className="p-4 flex items-center gap-4">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-semibold text-gray-900">NF-e #{nfe.number || nfe.id.slice(-6)}</span>
-                      <Badge className={`text-xs ${nfeStatusColor(nfe.status)}`}>{nfeStatusLabel(nfe.status)}</Badge>
+            {nfes.map(nota => {
+              const ehNfse = nota.model === 'nfse';
+              const presa = nota.status === 'validando';
+              return (
+                <Card key={nota.id} className="hover:shadow-sm transition-shadow">
+                  <CardContent className="p-4">
+                    <div className="flex items-start gap-4 flex-wrap">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          <span className="font-semibold text-gray-900">
+                            {MODELO_LABEL[nota.model] || 'Nota'}
+                            {ehNfse && nota.rps_number ? ` nº ${nota.rps_number}` : ''}
+                          </span>
+                          <Badge className={`text-xs ${statusColor(nota.status)}`}>
+                            {statusLabel(nota.status)}
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-gray-500">{formatDateTime(nota.created_date)}</p>
+
+                        {ehNfse && nota.number && (
+                          <button onClick={() => copiarChave(nota.number)}
+                            className="text-xs text-gray-600 mt-1 font-mono break-all text-left hover:text-gray-900 flex items-start gap-1">
+                            <Copy className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                            {nota.number}
+                          </button>
+                        )}
+
+                        {ehNfse && Number(nota.iss_amount) > 0 && (
+                          <p className="text-xs text-gray-500 mt-1">
+                            ISS: {formatCurrency(nota.iss_amount)}
+                          </p>
+                        )}
+
+                        {nota.rejection_reason && (
+                          <p className="text-xs text-red-600 mt-1">{nota.rejection_reason}</p>
+                        )}
+
+                        {presa && (
+                          <p className="text-xs text-amber-600 mt-1">
+                            A transmissão não terminou. Se a nota não aparecer no Sefin,
+                            libere para tentar de novo.
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="text-right flex-shrink-0">
+                        <p className="font-bold text-gray-900">{formatCurrency(nota.total_amount)}</p>
+                        <div className="flex gap-1 mt-1 items-center justify-end flex-wrap">
+                          {nota.xml_content && (
+                            <Button size="sm" variant="ghost" className="h-7 px-2 text-xs"
+                              onClick={() => baixar(nota)}>
+                              <Download className="w-3 h-3 mr-1" />XML
+                            </Button>
+                          )}
+                          {ehNfse && nota.number && noDesktop && (
+                            <Button size="sm" variant="ghost" className="h-7 px-2 text-xs"
+                              disabled={ocupado === nota.id} onClick={() => consultar(nota)}>
+                              <RefreshCw className={cn('w-3 h-3 mr-1', ocupado === nota.id && 'animate-spin')} />
+                              Consultar
+                            </Button>
+                          )}
+                          {presa && (
+                            <Button size="sm" variant="ghost"
+                              className="h-7 px-2 text-xs text-amber-700 hover:bg-amber-50"
+                              disabled={ocupado === nota.id} onClick={() => liberar(nota)}>
+                              <Unlock className="w-3 h-3 mr-1" />Liberar
+                            </Button>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                    <p className="text-xs text-gray-500">{formatDateTime(nfe.created_date)}</p>
-                    {nfe.rejection_reason && <p className="text-xs text-red-500 mt-1">{nfe.rejection_reason}</p>}
-                    {nfe.protocol && <p className="text-xs text-green-600">Protocolo: {nfe.protocol}</p>}
-                  </div>
-                  <div className="text-right flex-shrink-0">
-                    <p className="font-bold text-gray-900">{formatCurrency(nfe.total_amount)}</p>
-                    <div className="flex gap-2 mt-1 items-center justify-end">
-                      {nfe.danfe_url && <a href={nfe.danfe_url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline">DANFE</a>}
-                      {nfe.xml_url && <a href={nfe.xml_url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline">XML</a>}
-                      {['enviada', 'validando'].includes(nfe.status) && (
-                        <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" disabled={checking === nfe.id}
-                          onClick={() => handleCheck(nfe.id)}>
-                          <RefreshCw className={`w-3 h-3 mr-1 ${checking === nfe.id ? 'animate-spin' : ''}`} />
-                          Consultar
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
-        )
-      }
+        )}
     </div>
   );
 }

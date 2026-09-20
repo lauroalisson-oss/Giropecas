@@ -257,3 +257,37 @@ export function avisoProximaRevisao(r) {
   if (!partes.length) return null;
   return `${r.servico_nome}: próxima ${partes.join(' ')}`;
 }
+
+// Avisos de próxima revisão para IMPRIMIR na OS que o cliente leva.
+//
+// Olha só os serviços desta OS: é deles que nasce o próximo vencimento.
+// A conta parte da data e do km do próprio atendimento — não do estado
+// atual do veículo — porque o papel entregue hoje precisa dizer quando
+// voltar, e essa data não muda depois.
+export function revisoesDaOrdem({ ordem, servicosPorId = {} }) {
+  const itens = Array.isArray(ordem?.service_items) ? ordem.service_items : [];
+  const quando = ordem?.closed_at || ordem?.opened_at || ordem?.created_date;
+  if (!quando) return [];
+
+  const km = numeroOuNulo(ordem?.vehicle_km);
+  const vistos = new Set();
+  const avisos = [];
+
+  for (const item of itens) {
+    const servico = servicosPorId[item?.service_id];
+    if (!servico || vistos.has(servico.id)) continue;
+    vistos.add(servico.id);
+
+    const r = proximaRevisao({
+      servico,
+      dataExecucao: quando,
+      kmExecucao: km,
+      // No momento da entrega, o km do atendimento é o km atual.
+      kmAtual: km,
+    });
+    const frase = avisoProximaRevisao(r);
+    if (frase) avisos.push(frase);
+  }
+
+  return avisos;
+}

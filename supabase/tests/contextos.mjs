@@ -1,3 +1,25 @@
+// Contextos de empresa e licença, contra o banco de verdade.
+//
+// Suíte de INTEGRAÇÃO: precisa de usuários de teste no Supabase. As senhas
+// vêm do ambiente — nunca do arquivo. Senha de acesso real gravada no
+// repositório vale para todo mundo que enxerga o repositório, inclusive
+// depois de trocada no histórico do git.
+//
+// Como rodar:
+//   GIRO_TESTE_VALIDA=... GIRO_TESTE_VENCIDA=... GIRO_TESTE_ADMIN=... npm test
+
+const SENHAS = {
+  valida: process.env.GIRO_TESTE_VALIDA,
+  vencida: process.env.GIRO_TESTE_VENCIDA,
+  admin: process.env.GIRO_TESTE_ADMIN,
+};
+
+if (!SENHAS.valida || !SENHAS.vencida || !SENHAS.admin) {
+  console.log('PULADA: faltam as senhas dos usuários de teste no ambiente.');
+  console.log('        Defina GIRO_TESTE_VALIDA, GIRO_TESTE_VENCIDA e GIRO_TESTE_ADMIN.');
+  process.exit(2);
+}
+
 import { createClient } from '/home/user/Giropecas/node_modules/@supabase/supabase-js/dist/index.mjs';
 const novo = () => createClient('https://boxolsxxlslqnehptomb.supabase.co',
   'sb_publishable_gE98QS8CEYY4cCtNvADSGQ_4U6hIXPp', { auth:{ persistSession:false } });
@@ -24,7 +46,7 @@ async function contextos(sb, email){
 
 // --- Oficina com licença válida ---
 let sb = novo();
-let { error } = await sb.auth.signInWithPassword({email:'valida@teste.local',password:'TesteValida1'});
+let { error } = await sb.auth.signInWithPassword({email:'valida@teste.local',password:SENHAS.valida});
 ok(!error,'login oficina valida'+(error?` (${error.message})`:''));
 let c = await contextos(sb,'valida@teste.local');
 ok(c.status==='licensed', `status licensed (veio ${c.status})`);
@@ -38,7 +60,7 @@ await sb.auth.signOut();
 
 // --- Oficina com licença vencida ---
 sb = novo();
-({ error } = await sb.auth.signInWithPassword({email:'vencida@teste.local',password:'TesteVencida1'}));
+({ error } = await sb.auth.signInWithPassword({email:'vencida@teste.local',password:SENHAS.vencida}));
 ok(!error,'login oficina vencida'+(error?` (${error.message})`:''));
 c = await contextos(sb,'vencida@teste.local');
 ok(c.status==='expired', `status expired -> acesso bloqueado (veio ${c.status})`);
@@ -51,7 +73,7 @@ await sb.auth.signOut();
 
 // --- Super-admin ---
 sb = novo();
-({ error } = await sb.auth.signInWithPassword({email:'lauro.alisson@gmail.com',password:'k3JnAbUrWmTG8w'}));
+({ error } = await sb.auth.signInWithPassword({email:process.env.GIRO_TESTE_ADMIN_EMAIL || 'lauro.alisson@gmail.com',password:SENHAS.admin}));
 ok(!error,'login super-admin'+(error?` (${error.message})`:''));
 const comps = await sb.from('companies').select('*');
 ok((comps.data||[]).length>=2, `super-admin ve todas as oficinas (viu ${comps.data?.length})`);

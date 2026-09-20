@@ -14,6 +14,7 @@ import { Search, Download, ClipboardList, ShoppingCart, Filter, X, Trash2, Edit2
 import { Link, useNavigate } from 'react-router-dom';
 import { useToast } from '@/components/ui/use-toast';
 import { printDocument } from '@/components/PrintReceipt';
+import { revisoesDaOrdem } from '@/lib/crm';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import EmitirNotaButton from '@/components/EmitirNotaButton';
 import EmitirNfseButton from '@/components/EmitirNfseButton';
@@ -114,6 +115,9 @@ export default function Historico() {
   const partMap = Object.fromEntries(parts.map(p => [p.id, { description: p.description, stock: p.stock_quantity }]));
   const technicianMap = Object.fromEntries(technicians.map(t => [t.id, t]));
   const partsById = Object.fromEntries(parts.map(p => [p.id, p]));
+  // Cadastro completo do serviço (serviceMap só tem o nome): é dele que
+  // saem os intervalos de revisão impressos na OS.
+  const servicosPorId = Object.fromEntries(services.map(s => [s.id, s]));
 
   // Última nota fiscal por venda e por OS (para mostrar status/DANFE no histórico)
   const nfeBySale = {};
@@ -468,10 +472,10 @@ export default function Historico() {
                                 </button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => printDocument({ type: 'os', doc: order, company, customer: customerMap[order.customer_id] || null, technician: technicianMap[order.mechanic_id] || null, format: 'a4' })}>
+                                <DropdownMenuItem onClick={() => printDocument({ type: 'os', doc: order, company, customer: customerMap[order.customer_id] || null, technician: technicianMap[order.mechanic_id] || null, revisoes: revisoesDaOrdem({ ordem: order, servicosPorId: servicosPorId }), format: 'a4' })}>
                                   <FileText className="w-3.5 h-3.5 mr-2" />Folha A4
                                 </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => printDocument({ type: 'os', doc: order, company, customer: customerMap[order.customer_id] || null, technician: technicianMap[order.mechanic_id] || null, format: 'cupom' })}>
+                                <DropdownMenuItem onClick={() => printDocument({ type: 'os', doc: order, company, customer: customerMap[order.customer_id] || null, technician: technicianMap[order.mechanic_id] || null, revisoes: revisoesDaOrdem({ ordem: order, servicosPorId: servicosPorId }), format: 'cupom' })}>
                                   <Receipt className="w-3.5 h-3.5 mr-2" />Cupom 80mm
                                 </DropdownMenuItem>
                               </DropdownMenuContent>

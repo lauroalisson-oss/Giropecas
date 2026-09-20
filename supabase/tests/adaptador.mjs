@@ -1,3 +1,16 @@
+// O adaptador base44 -> Supabase, contra o banco de verdade.
+//
+// Suíte de INTEGRAÇÃO: precisa de um usuário de teste no Supabase, com a
+// senha vinda do ambiente (nunca do arquivo).
+//
+// Como rodar:  GIRO_TESTE_ADAPTADOR=... npm test
+
+const SENHA_ADAPTADOR = process.env.GIRO_TESTE_ADAPTADOR;
+if (!SENHA_ADAPTADOR) {
+  console.log('PULADA: defina GIRO_TESTE_ADAPTADOR com a senha do usuário de teste.');
+  process.exit(2);
+}
+
 import { createClient } from '/home/user/Giropecas/node_modules/@supabase/supabase-js/dist/index.mjs';
 
 const URL='https://boxolsxxlslqnehptomb.supabase.co';
@@ -33,7 +46,7 @@ catch { ok(true,'sem login nao insere'); }
 
 // 2) Login
 const { data:auth, error:aerr } = await supabase.auth.signInWithPassword({
-  email:'teste.adaptador@giropecas.local', password:'SenhaTeste123!' });
+  email:'teste.adaptador@giropecas.local', password:SENHA_ADAPTADOR });
 ok(!aerr && !!auth?.user, 'login com email/senha funciona' + (aerr?` (${aerr.message})`:''));
 
 // 3) create / get / filter / update / delete com sessao

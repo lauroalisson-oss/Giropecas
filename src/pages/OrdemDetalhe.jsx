@@ -16,6 +16,7 @@ import PagamentoModal from '@/components/PagamentoModal';
 import EmitirNotaButton from '@/components/EmitirNotaButton';
 import EmitirNfseButton from '@/components/EmitirNfseButton';
 import { printDocument } from '@/components/PrintReceipt';
+import { revisoesDaOrdem } from '@/lib/crm';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import RevisoesVeiculo from '@/components/RevisoesVeiculo';
 
@@ -68,10 +69,16 @@ export default function OrdemDetalhe() {
       }
       const techs = await base44.entities.Technician.filter({ company_id: ord.company_id, is_active: true }, 'name');
       setAllTechnicians(techs);
-      // Carrega peças para a pré-checagem fiscal (NCM) do botão Emitir Nota
+      // Peças: pré-checagem fiscal (NCM) do botão Emitir Nota.
+      // Serviços: intervalos de revisão impressos na OS — por isso são
+      // carregados sempre, não só ao entrar em modo de edição.
       if (!allParts.length) {
         const pts = await base44.entities.Part.filter({ company_id: ord.company_id });
         setAllParts(pts);
+      }
+      if (!allServices.length) {
+        const svcs = await base44.entities.Service.filter({ company_id: ord.company_id });
+        setAllServices(svcs);
       }
     } finally {
       setLoading(false);
@@ -190,7 +197,12 @@ export default function OrdemDetalhe() {
   };
 
   const handlePrint = (format) => {
-    printDocument({ type: 'os', doc: { ...order, vehicle }, company, customer, technician, format });
+    // Avisos de próxima revisão vão impressos na OS que o cliente leva.
+    const revisoes = revisoesDaOrdem({
+      ordem: order,
+      servicosPorId: Object.fromEntries(allServices.map(s => [s.id, s])),
+    });
+    printDocument({ type: 'os', doc: { ...order, vehicle }, company, customer, technician, revisoes, format });
   };
 
   if (loading) return <div className="flex justify-center py-20 text-gray-400">Carregando...</div>;

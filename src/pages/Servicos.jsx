@@ -6,7 +6,8 @@ import { formatCurrency } from '@/lib/formatters';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
-import { Plus, Search, Wrench, Clock } from 'lucide-react';
+import { Plus, Search, Wrench, Clock, Check, AlertTriangle } from 'lucide-react';
+import { resolverCTribNac } from '../../shared/ctribnac.js';
 
 const EMPTY_SERVICE = {
   name: '', description: '', standard_time_hours: 1, labor_price: 0, category: '', code: '',
@@ -25,6 +26,53 @@ const LC116_OFICINA = [
   { code: '14.05', label: 'Restauração, recondicionamento, pintura, polimento e congêneres' },
   { code: '14.06', label: 'Instalação e montagem com material fornecido pelo cliente' },
 ];
+
+// Mostra, enquanto o lojista digita, qual código nacional (cTribNac) vai
+// sair na nota — e o que fazer quando o item tem mais de um.
+//
+// Sem isto, um item ambíguo (62 dos 338 têm vários desdobros) só falharia
+// na hora de emitir, com o cliente esperando pela nota.
+function CodigoNacional({ entrada, onEscolher }) {
+  const r = resolverCTribNac(entrada);
+
+  if (r.ok) {
+    return (
+      <p className="text-xs mt-1 text-emerald-700 flex items-start gap-1">
+        <Check className="w-3 h-3 mt-0.5 flex-shrink-0" />
+        <span>
+          Código nacional <strong>{r.codigo}</strong> — {r.descricao}
+        </span>
+      </p>
+    );
+  }
+
+  if (r.motivo === 'vazio') {
+    return (
+      <p className="text-xs text-gray-400 mt-1">
+        Oficina normalmente usa <strong>14.01</strong> (conserto e manutenção de veículos).
+      </p>
+    );
+  }
+
+  return (
+    <div className="mt-1 text-xs">
+      <p className="text-amber-700 flex items-start gap-1">
+        <AlertTriangle className="w-3 h-3 mt-0.5 flex-shrink-0" />
+        <span>{r.mensagem}</span>
+      </p>
+      {r.opcoes && (
+        <div className="mt-1.5 space-y-1 pl-4">
+          {r.opcoes.map(o => (
+            <button key={o.codigo} type="button" onClick={() => onEscolher(o.codigo)}
+              className="block text-left text-gray-600 hover:text-emerald-700 hover:underline">
+              <strong>{o.codigo}</strong> — {o.descricao}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Servicos() {
   const { company } = useCompany();
@@ -167,9 +215,8 @@ export default function Servicos() {
                   <datalist id="lc116-oficina">
                     {LC116_OFICINA.map(i => <option key={i.code} value={i.code}>{i.label}</option>)}
                   </datalist>
-                  <p className="text-xs text-gray-400 mt-1">
-                    Oficina normalmente usa <strong>14.01</strong> (conserto e manutenção de veículos).
-                  </p>
+                  <CodigoNacional entrada={form.service_code_lc116}
+                    onEscolher={c => setForm(p => ({ ...p, service_code_lc116: c }))} />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-gray-600">Código de tributação do município</label>

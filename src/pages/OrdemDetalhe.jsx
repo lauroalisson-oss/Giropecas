@@ -14,6 +14,7 @@ import { ArrowLeft, Printer, CreditCard, Package, Wrench, User, Car, Edit, Save,
 import { useToast } from '@/components/ui/use-toast';
 import PagamentoModal from '@/components/PagamentoModal';
 import EmitirNotaButton from '@/components/EmitirNotaButton';
+import EmitirNfseButton from '@/components/EmitirNfseButton';
 import { printDocument } from '@/components/PrintReceipt';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import RevisoesVeiculo from '@/components/RevisoesVeiculo';
@@ -269,6 +270,11 @@ export default function OrdemDetalhe() {
                   workOrderId={id}
                   items={order.parts_items}
                   partsById={Object.fromEntries(allParts.map(p => [p.id, p]))}
+                  onEmitted={loadOrder}
+                />
+                <EmitirNfseButton
+                  workOrderId={id}
+                  temServicos={(order.service_items?.length || 0) > 0}
                   onEmitted={loadOrder}
                 />
                 <Button size="sm" variant="outline" onClick={cancelOrder}

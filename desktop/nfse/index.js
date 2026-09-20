@@ -6,11 +6,21 @@
 
 const { ipcMain } = require('electron');
 const certificado = require('./certificado');
+const config = require('../config');
 const { assinarDps, compactarParaEnvio } = require('./assinatura');
 const { enviarDps, consultarNfse } = require('./sefin');
 
-// Converte exceção em resposta previsível, para a tela sempre ter o que mostrar.
-const protegido = (fn) => async (_evento, ...args) => {
+// Converte exceção em resposta previsível, para a tela sempre ter o que
+// mostrar — e confere, a cada chamada, de qual endereço veio o pedido.
+//
+// A conferência é feita aqui, no processo principal, e não no preload:
+// o preload roda dentro da página, então não serve para decidir se aquela
+// página tem direito de usar o certificado da oficina.
+const protegido = (fn) => async (evento, ...args) => {
+  const origem = evento?.senderFrame?.url || evento?.sender?.getURL?.();
+  if (!config.origemAutorizada(origem)) {
+    return { ok: false, erro: 'Pedido veio de um endereço não autorizado.' };
+  }
   try {
     return { ok: true, dados: await fn(...args) };
   } catch (e) {

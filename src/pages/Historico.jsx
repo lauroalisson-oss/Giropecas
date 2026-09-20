@@ -16,6 +16,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { printDocument } from '@/components/PrintReceipt';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import EmitirNotaButton from '@/components/EmitirNotaButton';
+import EmitirNfseButton from '@/components/EmitirNfseButton';
 import { NFE_STATUS_LABEL, NFE_STATUS_COLOR } from '@/lib/fiscal';
 import VeiculoHistoricoPanel from '@/components/historico/VeiculoHistoricoPanel';
 
@@ -438,6 +439,13 @@ export default function Historico() {
                             {nfeByOrder[order.id] && <NotaSelo nota={nfeByOrder[order.id]} />}
                             {(!nfeByOrder[order.id] || ['rejeitada', 'cancelada'].includes(nfeByOrder[order.id].status)) && (
                               <EmitirNotaButton workOrderId={order.id} items={order.parts_items} partsById={partsById} onEmitted={loadData} />
+                            )}
+                            {(order.service_items?.length || 0) > 0 && (
+                              <EmitirNfseButton
+                                workOrderId={order.id}
+                                temServicos
+                                onEmitted={loadData}
+                              />
                             )}
                           </div>
                         </div>

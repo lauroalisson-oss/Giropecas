@@ -1,6 +1,33 @@
-# Giropeças Offline — Instalador para Windows
+# Giropeças — Instalador para Windows
 
-Esta pasta gera o **instalador Windows** (`Giropecas-Setup-1.0.0.exe`) do aplicativo offline. O instalador pode ser copiado para um pendrive e instalado em qualquer máquina Windows — **sem internet**. Na primeira abertura o aplicativo pede a **chave de acesso**, que você gera no painel **Admin Provedor** do sistema online.
+Esta pasta gera o **instalador Windows** (`Giropecas-Setup-1.0.0.exe`). O instalador pode ser copiado para um pendrive e instalado em qualquer máquina Windows.
+
+## Os dois modos
+
+Na primeira abertura o aplicativo pergunta como este computador vai trabalhar:
+
+| Modo | O que é | Quando usar |
+|---|---|---|
+| **Online** | Abre o sistema Giropeças da nuvem (o mesmo endereço do navegador) | A oficina usa o sistema online e quer **emitir NFS-e** |
+| **Offline** | As telas embutidas, com dados só nesta máquina | Sem internet. Pede a **chave de acesso** gerada no painel Admin Provedor |
+
+Para trocar depois: menu **Sistema → Trocar de modo**.
+
+## Por que o aplicativo existe
+
+Para emitir NFS-e, a conexão com o Sefin Nacional precisa ser autenticada com o **certificado digital A1** da oficina (mTLS). **Navegador nenhum sabe fazer isso** — não há API que dê acesso ao certificado.
+
+Então a divisão é esta:
+
+- o sistema na nuvem monta a nota, reserva o número e confere o plano;
+- **este aplicativo** assina com o certificado e transmite ao Sefin;
+- a nuvem guarda a chave de acesso e o XML que voltou.
+
+O certificado e a senha ficam **só neste computador** (`%APPDATA%\Giropecas\certificado`), com a senha protegida pelo cofre do Windows (DPAPI). Não são enviados ao sistema nem ao provedor — é isso que mantém a responsabilidade da nota com a oficina.
+
+No modo online, **só o endereço configurado** pode pedir uma assinatura. Qualquer outro link abre no navegador do sistema, fora do aplicativo.
+
+Configure o certificado em **Configurações → Fiscal**, dentro do aplicativo.
 
 ## Como gerar o instalador (passo a passo, no Windows)
 

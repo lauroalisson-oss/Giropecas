@@ -25,6 +25,8 @@
     },
     "files": [
       "main.js",
+      "config.js",
+      "conectar.html",
       "app/**/*",
       "preload.js",
       "nfse/**/*"

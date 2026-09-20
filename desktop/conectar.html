@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>Giropeças</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: #f1f5f9; color: #0f172a; padding: 24px;
+  }
+  .caixa { background: #fff; border-radius: 14px; padding: 32px; width: 100%; max-width: 480px;
+           box-shadow: 0 10px 30px rgba(15,23,42,.08); }
+  h1 { margin: 0 0 4px; font-size: 22px; }
+  p.sub { margin: 0 0 24px; color: #64748b; font-size: 14px; line-height: 1.5; }
+  label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+  input { width: 100%; padding: 11px 12px; border: 1px solid #cbd5e1; border-radius: 8px;
+          font-size: 15px; font-family: inherit; }
+  input:focus { outline: 2px solid #059669; outline-offset: -1px; border-color: #059669; }
+  .dica { font-size: 12px; color: #94a3b8; margin-top: 6px; }
+  button { width: 100%; padding: 12px; border: 0; border-radius: 8px; font-size: 15px;
+           font-weight: 600; cursor: pointer; font-family: inherit; }
+  .principal { background: #059669; color: #fff; margin-top: 18px; }
+  .principal:hover { background: #047857; }
+  .secundario { background: transparent; color: #475569; margin-top: 10px; font-weight: 500;
+                text-decoration: underline; }
+  .erro { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; border-radius: 8px;
+          padding: 10px 12px; font-size: 13px; margin-top: 14px; display: none; }
+  .nota { margin-top: 24px; padding-top: 18px; border-top: 1px solid #e2e8f0;
+          font-size: 12px; color: #94a3b8; line-height: 1.6; }
+</style>
+</head>
+<body>
+  <div class="caixa">
+    <h1>🔧 Giropeças</h1>
+    <p class="sub">Informe o endereço do sistema da sua oficina para conectar este computador.</p>
+
+    <label for="url">Endereço do sistema</label>
+    <input id="url" type="text" placeholder="minha-oficina.vercel.app" autocomplete="off" spellcheck="false">
+    <div class="dica">É o mesmo endereço que você usa no navegador.</div>
+
+    <div class="erro" id="erro"></div>
+
+    <button class="principal" id="conectar">Conectar</button>
+    <button class="secundario" id="offline">Usar o modo offline (sem internet)</button>
+
+    <div class="nota">
+      O certificado digital da oficina fica guardado <strong>neste computador</strong>, protegido
+      pelo Windows. Ele não é enviado ao sistema nem ao provedor — é por isso que a emissão
+      da nota só acontece por aqui.
+    </div>
+  </div>
+
+<script>
+  const campo = document.getElementById('url');
+  const erro = document.getElementById('erro');
+
+  function mostrarErro(texto) {
+    erro.textContent = texto;
+    erro.style.display = 'block';
+  }
+
+  async function conectar() {
+    erro.style.display = 'none';
+    const r = await window.giropecasApp.conectarNuvem(campo.value);
+    if (!r.ok) mostrarErro(r.erro);
+  }
+
+  document.getElementById('conectar').addEventListener('click', conectar);
+  campo.addEventListener('keydown', (e) => { if (e.key === 'Enter') conectar(); });
+  document.getElementById('offline').addEventListener('click', () => window.giropecasApp.usarOffline());
+  campo.focus();
+</script>
+</body>
+</html>

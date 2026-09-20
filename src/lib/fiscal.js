@@ -1,19 +1,16 @@
-// Helpers de frontend para a emissão fiscal (NFC-e / NF-e).
-// As chamadas de rede batem nas backend functions do Base44, que guardam o
-// token do gateway com segurança — o frontend nunca vê o token.
+// Helpers de frontend para NFC-e / NF-e (notas de PEÇA).
+//
+// ATENÇÃO — estas funções ainda apontam para as backend functions do
+// Base44, que não existem mais depois da migração para Supabase + Vercel.
+// O caminho de NF-e/NFC-e está parado: chamá-lo hoje dá erro de endpoint.
+//
+// A nota de SERVIÇO (NFS-e), que é o foco do sistema, segue por outro
+// caminho, já funcionando: veja `src/lib/nfse.js`. Lá a assinatura acontece
+// no computador da oficina, com o certificado que nunca sai de lá.
+//
+// O envio do certificado a um gateway foi removido de propósito: ele
+// contradizia esse modelo e mandaria o arquivo da oficina pela rede.
 import { base44 } from '@/api/base44Client';
-
-// Cadastra/atualiza a empresa no provedor fiscal, enviando o certificado A1.
-// A oficina faz tudo aqui dentro — o certificado vai direto para o gateway,
-// não é guardado no banco do sistema.
-export async function cadastrarEmpresaFiscal({ companyId, certificado, senha }) {
-  const { data } = await base44.functions.invoke('cadastrarEmpresaFiscal', {
-    company_id: companyId,
-    certificado, // objeto File (.pfx) — enviado como multipart
-    senha_certificado: senha,
-  });
-  return data; // { registered, cert_expires_at, company }
-}
 
 // Emite uma nota a partir de uma venda (Sale) ou ordem de serviço (WorkOrder).
 // tipo: 'nfce' (consumidor/balcão) | 'nfe' (empresa/pessoa identificada)

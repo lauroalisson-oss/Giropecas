@@ -3,6 +3,9 @@
 // Com contextIsolation ligado, a página não tem acesso ao Node. Aqui
 // expomos apenas as funções necessárias — e nenhuma delas devolve o
 // certificado ou a senha.
+//
+// A autorização NÃO é decidida aqui: quem confere de qual endereço veio o
+// pedido é o processo principal, a cada chamada. Este arquivo só encaminha.
 
 const { contextBridge, ipcRenderer } = require('electron');
 
@@ -26,4 +29,10 @@ contextBridge.exposeInMainWorld('giropecasNFSe', {
 
   // Permite ao app web saber que está rodando dentro do desktop.
   disponivel: true,
+});
+
+// Usado só pela tela de primeira abertura (conectar.html).
+contextBridge.exposeInMainWorld('giropecasApp', {
+  conectarNuvem: (url) => ipcRenderer.invoke('app:conectar-nuvem', url),
+  usarOffline: () => ipcRenderer.invoke('app:usar-offline'),
 });

@@ -17,7 +17,7 @@
 // para o provedor, nem para lugar nenhum.
 
 import { base44 } from '@/api/base44Client';
-export { pendenciasNfse, nfseNoMes, MODELO_LABEL } from './nfse-dados';
+export { pendenciasNfse, nfseNoMes, idDpsDaNota, MODELO_LABEL } from './nfse-dados';
 
 // A ponte é injetada pelo aplicativo desktop (preload.js). Num navegador
 // comum ela simplesmente não existe.
@@ -138,16 +138,90 @@ export function baixarXml(nota) {
   return nome;
 }
 
-// Marca como não emitida uma nota que ficou presa em "validando" — quando
-// a transmissão caiu no meio e a tela não recebeu resposta.
+// Marca como não emitida uma nota que ficou presa em "validando".
 //
-// Não mexe no Sefin: se a nota tiver sido gerada lá apesar da queda, a
-// próxima tentativa é recusada como DPS repetida, e a mensagem do governo
-// diz isso. É melhor errar para esse lado do que dar por emitida uma nota
-// que não existe.
+// Usada depois de confirmar com o Sefin que a DPS não virou nota (ver
+// verificarNotaPresa). Sozinha, ela só mexe no nosso registro — não
+// pergunta nada ao governo.
 export async function liberarNotaPresa(nfeId) {
   await base44.functions.invoke('nfseRegistrar', {
     nfe_id: nfeId,
     erro: 'Transmissão interrompida — a nota não chegou a ser confirmada pelo Sefin.',
   });
+}
+
+export { MOTIVOS_CANCELAMENTO } from '../../shared/nfse-evento.js';
+
+/**
+ * Cancela uma NFS-e autorizada.
+ *
+ * Cancelar não apaga a nota: registra um evento ligado a ela. A nota
+ * continua no histórico, agora marcada como cancelada — é assim que o
+ * fisco enxerga e é assim que o contador precisa ver.
+ */
+export async function cancelarNfse({ nfeId, motivo, justificativa }, onEtapa = () => {}) {
+  const ponte = ponteDesktop();
+  if (!ponte) throw new Error(AVISO_SEM_PONTE);
+
+  onEtapa('Montando o pedido...');
+  const { data: pedido } = await base44.functions.invoke('nfseCancelar', {
+    nfe_id: nfeId, motivo, justificativa,
+  });
+
+  onEtapa('Enviando ao Sefin...');
+  const r = await ponte.cancelar({
+    xmlEvento: pedido.xmlEvento,
+    idInfPedReg: pedido.idInfPedReg,
+    chaveAcesso: pedido.chave_acesso,
+    producao: pedido.producao,
+  });
+
+  if (!r?.ok) {
+    const motivoErro = r?.erro || 'O Sefin recusou o cancelamento.';
+    // Registra a recusa SEM mexer no status: a nota segue autorizada,
+    // porque é isso que vale no Sefin.
+    try {
+      await base44.functions.invoke('nfseCancelar', { nfe_id: nfeId, erro_sefin: motivoErro });
+    } catch { /* o erro do Sefin é o que importa */ }
+    throw new Error(motivoErro);
+  }
+
+  onEtapa('Guardando...');
+  await base44.functions.invoke('nfseCancelar', {
+    nfe_id: nfeId, confirmado: true, justificativa,
+  });
+
+  return { status: 'cancelada' };
+}
+
+/**
+ * Pergunta ao Sefin se a DPS de uma nota presa em "validando" virou nota.
+ *
+ * Sem isto a oficina fica no escuro: ou emite de novo e arrisca
+ * duplicidade, ou deixa a OS sem nota. O endpoint GET /dps/{id} existe
+ * exatamente para este caso, e está no manual oficial.
+ */
+export async function verificarNotaPresa({ nfeId, idDps, producao = false }) {
+  const ponte = ponteDesktop();
+  if (!ponte) throw new Error(AVISO_SEM_PONTE);
+
+  const r = await ponte.consultarDps({ idDps, producao });
+  if (!r?.ok) throw new Error(r?.erro || 'Não foi possível consultar a DPS.');
+
+  const dados = r.dados;
+  if (dados?.existe === false) {
+    // Não virou nota: liberar para nova tentativa é seguro.
+    await liberarNotaPresa(nfeId);
+    return { existe: false };
+  }
+
+  // Virou nota: grava a chave, para a oficina ter o documento.
+  if (dados?.chaveAcesso) {
+    await base44.functions.invoke('nfseRegistrar', {
+      nfe_id: nfeId,
+      chave_acesso: dados.chaveAcesso,
+      xml_nfse: dados.xmlNfse,
+    });
+  }
+  return { existe: true, chaveAcesso: dados?.chaveAcesso };
 }

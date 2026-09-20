@@ -4,7 +4,8 @@
 // contasse diferente, o lojista veria folga onde a emissão já está barrada
 // — e descobriria só na hora de emitir para o cliente.
 
-import { pendenciasNfse, nfseNoMes } from '/home/user/Giropecas/src/lib/nfse-dados.js';
+import { pendenciasNfse, nfseNoMes, idDpsDaNota } from '/home/user/Giropecas/src/lib/nfse-dados.js';
+import { montarDps } from '/home/user/Giropecas/api/_lib/nfse-dps.js';
 
 let f = 0;
 const ok = (c, m) => { if (!c) { f++; console.log('FAIL:', m); } else console.log('ok:', m); };
@@ -67,6 +68,26 @@ const mistura = [
   nfse({ model: 'nfce', authorized_at: '2026-09-11T10:00:00' }),
 ];
 ok(nfseNoMes(mistura, HOJE) === 2, `conta so as 2 NFS-e autorizadas de setembro (deu ${nfseNoMes(mistura, HOJE)})`);
+
+console.log('--- Id da DPS guardado no rascunho ---');
+// Quando a transmissao cai no meio, e esse Id que permite perguntar ao
+// Sefin se a nota existe. Se nao sair do XML, a oficina fica no escuro.
+const dps = montarDps({
+  empresa: { ...completa, tax_regime: 'simples_nacional', nfse_series: '1' },
+  servicos: [{ description: 'Troca de oleo', hours: 1, total_price: 150,
+               servico: { id: 's1', service_code_lc116: '14.01', iss_rate: 5 } }],
+  numero: 7, serie: '1',
+});
+const extraido = idDpsDaNota({ xml_content: dps.xml });
+ok(extraido === dps.id, `extrai o Id do XML real (${extraido})`);
+ok(extraido.length === 45, 'o Id extraido tem os 45 caracteres');
+ok(idDpsDaNota({ xml_content: null }) === null, 'sem XML devolve nulo');
+ok(idDpsDaNota(null) === null, 'nota nula devolve nulo');
+ok(idDpsDaNota({ xml_content: '<DPS><infDPS>sem Id</infDPS></DPS>' }) === null, 'XML sem Id devolve nulo');
+ok(idDpsDaNota({ xml_content: 'isso nao e xml' }) === null, 'texto solto devolve nulo');
+// O XML da NOTA (resposta do governo) nao e o da DPS.
+ok(idDpsDaNota({ xml_content: '<NFSe><infNFSe Id="NFS123">x</infNFSe></NFSe>' }) === null,
+  'nao confunde o Id da NFS-e com o da DPS');
 
 console.log(f === 0 ? '\n✅ TELA DE NOTAS OK' : `\n❌ ${f} falha(s)`);
 process.exit(f ? 1 : 0);

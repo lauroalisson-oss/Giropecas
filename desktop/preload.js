@@ -27,6 +27,12 @@ contextBridge.exposeInMainWorld('giropecasNFSe', {
 
   consultar: (params) => ipcRenderer.invoke('nfse:consultar', params),
 
+  // Cancelamento: registra o evento e101101 ligado à nota.
+  cancelar: (params) => ipcRenderer.invoke('nfse:cancelar', params),
+
+  // Pergunta se uma DPS já virou nota (emissão que caiu no meio).
+  consultarDps: (params) => ipcRenderer.invoke('nfse:consultar-dps', params),
+
   // Permite ao app web saber que está rodando dentro do desktop.
   disponivel: true,
 });

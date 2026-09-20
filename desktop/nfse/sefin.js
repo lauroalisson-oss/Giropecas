@@ -128,4 +128,44 @@ async function consultarNfse({ chaveAcesso, pfx, senha, producao = false }) {
   return interpretar(resposta);
 }
 
-module.exports = { enviarDps, consultarNfse, HOSTS, CAMINHOS };
+// Registra um evento (cancelamento) na nota.
+//
+// Endpoint confirmado no manual oficial: POST /nfse/{chaveAcesso}/eventos
+async function enviarEvento({ chaveAcesso, pedidoXmlGZipB64, pfx, senha, producao = false }) {
+  const ambiente = producao ? 'producao' : 'homologacao';
+  const resposta = await requisicao({
+    host: HOSTS[ambiente],
+    caminho: `${CAMINHOS[ambiente]}/${encodeURIComponent(chaveAcesso)}/eventos`,
+    corpo: { pedidoRegistroEventoXmlGZipB64: pedidoXmlGZipB64 },
+    pfx,
+    senha,
+  });
+  return interpretar(resposta);
+}
+
+// Pergunta ao Sefin se uma DPS já virou nota.
+//
+// É o que resolve a emissão que caiu no meio: sem isto, a oficina não
+// teria como saber se a nota existe lá, e só descobriria ao tentar de
+// novo e levar recusa por duplicidade.
+async function consultarDps({ idDps, pfx, senha, producao = false }) {
+  const ambiente = producao ? 'producao' : 'homologacao';
+  const base = CAMINHOS[ambiente].replace(/\/nfse$/, '');
+  const resposta = await requisicao({
+    host: HOSTS[ambiente],
+    caminho: `${base}/dps/${encodeURIComponent(idDps)}`,
+    metodo: 'GET',
+    pfx,
+    senha,
+  });
+
+  // 404 aqui é resposta útil, não erro: quer dizer que a DPS não gerou
+  // nota nenhuma, então a oficina pode emitir de novo com tranquilidade.
+  if (resposta.status === 404) {
+    return { ok: true, existe: false };
+  }
+  const r = interpretar(resposta);
+  return r.ok ? { ...r, existe: true } : r;
+}
+
+module.exports = { enviarDps, consultarNfse, enviarEvento, consultarDps, HOSTS, CAMINHOS };

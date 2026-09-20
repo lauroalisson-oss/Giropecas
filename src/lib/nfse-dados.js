@@ -43,3 +43,14 @@ export function nfseNoMes(notas, agora = new Date()) {
     return quando ? new Date(quando) >= inicio : false;
   }).length;
 }
+
+// Id da DPS guardado no XML do rascunho.
+//
+// Quando a transmissão cai no meio, é esse Id que permite perguntar ao
+// Sefin se a nota existe lá (GET /dps/{id}). Sem ele, resta adivinhar.
+export function idDpsDaNota(nota) {
+  const xml = nota?.xml_content;
+  if (!xml) return null;
+  const m = xml.match(/<infDPS[^>]*\bId="(DPS[^"]+)"/);
+  return m ? m[1] : null;
+}

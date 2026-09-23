@@ -6,8 +6,17 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-const URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-const ANON = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+// As variáveis são lidas A CADA CHAMADA, não na carga do módulo.
+//
+// Lidas na carga, ficam congeladas no primeiro import: se o módulo subir
+// antes de o ambiente estar montado, a rota responde "sem configuração"
+// para sempre, mesmo com tudo certo — e só volta quando a instância é
+// reciclada. Também é o que tornava impossível conferir a autenticação
+// num teste: o módulo já tinha decidido que não havia configuração.
+const config = () => ({
+  url: process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL,
+  anon: process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY,
+});
 
 export function erro(res, status, mensagem, extra = {}) {
   return res.status(status).json({ error: mensagem, ...extra });
@@ -15,6 +24,7 @@ export function erro(res, status, mensagem, extra = {}) {
 
 // Devolve { supabase, user, perfil } ou lança com a mensagem pronta para a tela.
 export async function contexto(req) {
+  const { url: URL, anon: ANON } = config();
   if (!URL || !ANON) {
     const e = new Error('Servidor sem configuração do Supabase.');
     e.status = 500;

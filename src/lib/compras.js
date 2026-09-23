@@ -1,4 +1,15 @@
-// Compras e contas a pagar: o que pode ser feito uma vez só.
+// Compras e contas a pagar.
+//
+// RECEBIMENTO e PAGAMENTO são dois fatos separados, em datas que podem
+// estar a 30 dias de distância:
+//
+//   receber  →  a peça entra no estoque. Não move o caixa.
+//   pagar    →  o dinheiro sai. É AQUI que o custo entra, e na DATA em
+//               que o pagamento aconteceu de verdade.
+//
+// Lançar o custo no recebimento jogaria a despesa no mês errado para
+// quem compra a prazo. Não lançar nunca — como era antes — mostrava a
+// receita da peça sem o custo dela. Cada oficina informa quando pagou.
 //
 // Receber uma compra soma ao estoque; marcar uma conta como paga lança
 // uma saída no caixa. As duas são operações que não se desfazem sozinhas,
@@ -57,4 +68,70 @@ export function impactoExclusaoConta(conta) {
     // está dizendo que esse registro não deveria existir.
     removeLancamento: paga,
   };
+}
+
+
+/**
+ * A compra pode ter o pagamento registrado?
+ */
+export function podeRegistrarPagamento(compra) {
+  if (!compra) return { erro: 'Ordem de compra não encontrada.' };
+  if (compra.payment_status === 'pago') {
+    return { erro: 'Esta compra já está paga — o custo já entrou no caixa.' };
+  }
+  if (compra.status === 'cancelada') {
+    return { erro: 'Esta compra foi cancelada.' };
+  }
+  if (centavos(compra.total) <= 0) {
+    return { erro: 'Compra sem valor para pagar.' };
+  }
+  return null;
+}
+
+// Data informada pelo lojista, ou hoje. É ela que define em qual mês o
+// custo aparece no relatório — por isso não pode ser "quando cliquei".
+export function dataDePagamento(informada) {
+  const texto = String(informada || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(texto)) return texto;
+  return new Date().toISOString().split('T')[0];
+}
+
+/**
+ * Lançamento de saída no caixa pelo pagamento de uma compra.
+ *
+ * A data do lançamento é a do PAGAMENTO, não a de hoje: é isso que faz o
+ * custo cair no mês certo quando a oficina registra um pagamento
+ * atrasado.
+ */
+export function lancamentoPagamentoCompra({ compra, data, companyId }) {
+  const quando = dataDePagamento(data);
+  return {
+    company_id: companyId,
+    date: quando,
+    type: 'debit',
+    category: 'Compra de Peças',
+    description: `Compra ${compra?.order_number || ''}`.trim(),
+    amount: Math.round(centavos(compra?.total)) / 100,
+    reference_type: 'purchase',
+    reference_id: compra?.id,
+  };
+}
+
+// Situação da compra para a tela: recebimento e pagamento lado a lado.
+export function situacaoCompra(compra) {
+  return {
+    recebida: compra?.status === 'recebida',
+    paga: compra?.payment_status === 'pago',
+    cancelada: compra?.status === 'cancelada',
+    // Peça no estoque sem o custo lançado: normal enquanto o prazo corre,
+    // mas é o que a oficina precisa enxergar para não esquecer.
+    custoPendente: compra?.status === 'recebida' && compra?.payment_status !== 'pago',
+  };
+}
+
+// Quanto há de compras recebidas e ainda não pagas.
+export function aPagarEmCompras(compras) {
+  const pendentes = (compras || []).filter(c => situacaoCompra(c).custoPendente);
+  const totalC = pendentes.reduce((s, c) => s + centavos(c.total), 0);
+  return { quantidade: pendentes.length, total: Math.round(totalC) / 100 };
 }

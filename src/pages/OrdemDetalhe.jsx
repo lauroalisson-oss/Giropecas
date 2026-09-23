@@ -17,6 +17,7 @@ import EmitirNotaButton from '@/components/EmitirNotaButton';
 import EmitirNfseButton from '@/components/EmitirNfseButton';
 import { printDocument } from '@/components/PrintReceipt';
 import { revisoesDaOrdem } from '@/lib/crm';
+import { saldoADevolver } from '@/lib/estoque';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import RevisoesVeiculo from '@/components/RevisoesVeiculo';
 
@@ -193,7 +194,39 @@ export default function OrdemDetalhe() {
 
   const cancelOrder = async () => {
     if (!confirm('Cancelar esta OS?')) return;
-    await updateStatus('cancelada');
+    setUpdating(true);
+    try {
+      // Se a OS já foi paga, as peças saíram da prateleira. Cancelar sem
+      // devolvê-las deixaria o estoque do sistema menor que o real, e a
+      // oficina compraria peça que já tem.
+      const movimentos = await base44.entities.StockMovement.filter({ reference_id: id });
+      const pendentes = saldoADevolver(movimentos);
+
+      for (const item of pendentes) {
+        const part = await base44.entities.Part.get(item.part_id);
+        const novo = (part.stock_quantity || 0) + item.quantity;
+        await base44.entities.Part.update(item.part_id, { stock_quantity: novo });
+        await base44.entities.StockMovement.create({
+          company_id: company.id, part_id: item.part_id, type: 'devolucao',
+          quantity: item.quantity, reason: `Cancelamento da OS #${order.order_number || ''}`,
+          reference_id: id, reference_type: 'estorno',
+          previous_stock: part.stock_quantity, new_stock: novo,
+        });
+      }
+
+      await base44.entities.WorkOrder.update(id, { status: 'cancelada' });
+      setOrder(prev => ({ ...prev, status: 'cancelada' }));
+      toast({
+        title: 'OS cancelada',
+        description: pendentes.length > 0
+          ? `${pendentes.length} peça(s) devolvida(s) ao estoque.`
+          : 'Nenhuma peça a devolver — esta OS não tinha baixado estoque.',
+      });
+    } catch (e) {
+      toast({ title: 'Erro ao cancelar', description: e.message, variant: 'destructive' });
+    } finally {
+      setUpdating(false);
+    }
   };
 
   const handlePrint = (format) => {

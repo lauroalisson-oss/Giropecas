@@ -11,9 +11,11 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-const URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const ANON = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+// Lidas a cada chamada, não na carga do módulo — ver api/_lib/contexto.js.
+const config = () => ({
+  url: process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL,
+  serviceRole: process.env.SUPABASE_SERVICE_ROLE_KEY,
+});
 
 // Sem os ambíguos (O/0, I/l/1) — a senha é digitada à mão pelo lojista.
 const ALFABETO = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
@@ -31,6 +33,7 @@ function erro(res, status, mensagem, code) {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return erro(res, 405, 'Método não permitido.');
+  const { url: URL, serviceRole: SERVICE_ROLE } = config();
   if (!URL || !SERVICE_ROLE) {
     return erro(res, 500, 'Servidor sem configuração do Supabase (SUPABASE_SERVICE_ROLE_KEY ausente).');
   }

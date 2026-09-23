@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
+import { projetarFluxo } from '@/lib/fluxo';
 import { useCompany } from '@/lib/CompanyContext';
-import { formatCurrency, formatDate } from '@/lib/formatters';
+import { formatCurrency } from '@/lib/formatters';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
@@ -15,6 +16,8 @@ export default function FluxoCaixaTab() {
   const [period, setPeriod] = useState('30');
   const [data, setData] = useState({
     saldoAtual: 0, aReceber: [], aPagar: [], projecao: [],
+    atraso: { receber: 0, pagar: 0, saldo: 0 },
+    semData: { receber: 0, pagar: 0 },
     totais: { receber30: 0, pagar30: 0, saldo30: 0, receber60: 0, pagar60: 0, saldo60: 0, receber90: 0, pagar90: 0, saldo90: 0 }
   });
 
@@ -24,40 +27,35 @@ export default function FluxoCaixaTab() {
     if (!company?.id) return;
     setLoading(true);
     const today = new Date().toISOString().split('T')[0];
-    const [creditTitles, bills, entries] = await Promise.all([
+    const [creditTitles, bills, entries, compras] = await Promise.all([
       base44.entities.CreditTitle.filter({ company_id: company.id }, 'due_date', 500),
       base44.entities.Bill.filter({ company_id: company.id }, 'due_date', 500),
       base44.entities.AccountingEntry.filter({ company_id: company.id }, '-date', 500),
+      // Compra recebida e não paga é dívida com o fornecedor: a peça já
+      // está na prateleira. Ficava de fora da projeção.
+      base44.entities.Purchase.filter({ company_id: company.id }, '-created_date', 300).catch(() => []),
     ]);
 
-    const saldoAtual = entries.reduce((s, e) => s + (e.type === 'credit' ? (e.amount || 0) : -(e.amount || 0)), 0);
-    const aReceber = creditTitles.filter(t => t.status !== 'pago' && t.status !== 'cancelado' && t.due_date >= today)
-      .map(t => ({ date: t.due_date, amount: t.remaining_amount || t.total_amount, description: `Crediário ${t.title_number || ''}`, type: 'receber' }));
-    const aPagar = bills.filter(b => b.status !== 'pago' && b.due_date >= today)
-      .map(b => ({ date: b.due_date, amount: b.amount, description: b.description, type: 'pagar' }));
+    const fx = projetarFluxo({
+      titulos: creditTitles,
+      contas: bills,
+      compras,
+      lancamentos: entries,
+      dias: parseInt(period),
+    });
 
-    const days = parseInt(period);
-    const projecao = [];
-    for (let i = 0; i < days; i++) {
-      const d = new Date(); d.setDate(d.getDate() + i);
-      const dateStr = d.toISOString().split('T')[0];
-      const r = aReceber.filter(x => x.date === dateStr).reduce((s, x) => s + x.amount, 0);
-      const p = aPagar.filter(x => x.date === dateStr).reduce((s, x) => s + x.amount, 0);
-      projecao.push({ date: dateStr, label: d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }), receber: r, pagar: p });
-    }
-
-    const calc = (w) => {
-      const lim = new Date(); lim.setDate(lim.getDate() + w);
-      const ls = lim.toISOString().split('T')[0];
-      const r = aReceber.filter(x => x.date <= ls).reduce((s, x) => s + x.amount, 0);
-      const p = aPagar.filter(x => x.date <= ls).reduce((s, x) => s + x.amount, 0);
-      return { receber: r, pagar: p, saldo: r - p };
-    };
     setData({
-      saldoAtual, aReceber, aPagar, projecao,
-      totais: { receber30: calc(30).receber, pagar30: calc(30).pagar, saldo30: calc(30).saldo,
-        receber60: calc(60).receber, pagar60: calc(60).pagar, saldo60: calc(60).saldo,
-        receber90: calc(90).receber, pagar90: calc(90).pagar, saldo90: calc(90).saldo }
+      saldoAtual: fx.saldoAtual,
+      atraso: fx.atraso,
+      semData: fx.semData,
+      aReceber: fx.receber.aVencer,
+      aPagar: fx.pagar.aVencer,
+      projecao: fx.projecao.map(d => ({ ...d, label: d.rotulo })),
+      totais: {
+        receber30: fx.janelas.d30.receber, pagar30: fx.janelas.d30.pagar, saldo30: fx.janelas.d30.saldo,
+        receber60: fx.janelas.d60.receber, pagar60: fx.janelas.d60.pagar, saldo60: fx.janelas.d60.saldo,
+        receber90: fx.janelas.d90.receber, pagar90: fx.janelas.d90.pagar, saldo90: fx.janelas.d90.saldo,
+      },
     });
     setLoading(false);
   };
@@ -77,6 +75,38 @@ export default function FluxoCaixaTab() {
           </SelectContent>
         </Select>
       </div>
+
+      {(data.atraso.receber > 0 || data.atraso.pagar > 0 || data.semData.pagar > 0) && (
+        <Card className="border-amber-200 bg-amber-50">
+          <CardContent className="p-4 space-y-2">
+            <p className="text-sm font-semibold text-amber-900">Fora da projeção por dia</p>
+            <p className="text-xs text-amber-800">
+              Estes valores não entram no gráfico porque não se sabe em que dia vão acontecer —
+              mas fazem parte da conta.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
+              {data.atraso.receber > 0 && (
+                <div className="bg-white rounded-lg border border-amber-200 p-2">
+                  <p className="text-xs text-gray-500">A receber em atraso</p>
+                  <p className="font-bold text-green-700">{formatCurrency(data.atraso.receber)}</p>
+                </div>
+              )}
+              {data.atraso.pagar > 0 && (
+                <div className="bg-white rounded-lg border border-amber-200 p-2">
+                  <p className="text-xs text-gray-500">A pagar em atraso</p>
+                  <p className="font-bold text-red-700">{formatCurrency(data.atraso.pagar)}</p>
+                </div>
+              )}
+              {data.semData.pagar > 0 && (
+                <div className="bg-white rounded-lg border border-amber-200 p-2">
+                  <p className="text-xs text-gray-500">Compras recebidas a pagar</p>
+                  <p className="font-bold text-red-700">{formatCurrency(data.semData.pagar)}</p>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Card><CardContent className="p-3">

@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
+import { dividirPagamento, lancamentosDaVenda } from '@/lib/caixa';
 import { CreditCard, DollarSign, PlusCircle, X } from 'lucide-react';
 
 const ALL_METHODS = [
@@ -60,7 +61,12 @@ export default function PagamentoModal({ order, customer, onClose, onSuccess }) 
   const totalFees = payments.reduce((s, p) => getCardFee(p), 0);
   const hasCash = payments.some(p => p.method === 'dinheiro');
   const change = hasCash ? Math.max(0, totalPaid - total) : 0;
-  const remainingForCredit = total - (parseFloat(downPayment) || 0);
+  // O que sobra para financiar é o total menos TUDO que entrou agora —
+  // entrada e qualquer outro meio lançado na mesma venda. Descontar só a
+  // entrada financiaria dinheiro que já está no caixa.
+  const { recebidoAgora, financiado: remainingForCredit } = dividirPagamento({
+    total, pagamentos: payments, entrada: downPayment,
+  });
   const installmentAmount = installments > 0 ? (remainingForCredit * (1 + interestRate / 100)) / installments : 0;
 
   const updatePayment = (idx, field, value) =>
@@ -135,13 +141,6 @@ export default function PagamentoModal({ order, customer, onClose, onSuccess }) 
       // Crediário titles
       if (hasCrediario) {
         const today = new Date();
-        if (parseFloat(downPayment) > 0) {
-          await base44.entities.AccountingEntry.create({
-            company_id: company.id, date: today.toISOString().split('T')[0],
-            type: 'credit', category: 'Vendas', description: `Entrada OS #${order.order_number}`,
-            amount: parseFloat(downPayment), reference_id: sale.id, reference_type: 'sale',
-          });
-        }
         for (let i = 0; i < installments; i++) {
           const dueDate = new Date(today);
           dueDate.setMonth(dueDate.getMonth() + i + 1);
@@ -157,23 +156,23 @@ export default function PagamentoModal({ order, customer, onClose, onSuccess }) 
         }
       }
 
-      // Accounting entries
-      const today = new Date().toISOString().split('T')[0];
-      await base44.entities.AccountingEntry.create({
-        company_id: company.id, date: today,
-        type: 'credit', category: 'Vendas OS',
-        description: `Venda OS #${order.order_number}`,
-        amount: total, reference_id: sale.id, reference_type: 'sale',
+      // Caixa: só o que ENTROU agora.
+      //
+      // O valor financiado no crediário não é dinheiro em caixa — vira
+      // dívida do cliente e entra parcela a parcela. Lançar o total aqui
+      // somava a mesma venda duas vezes no faturamento.
+      const { lancamentos } = lancamentosDaVenda({
+        total,
+        pagamentos: payments,
+        entrada: downPayment,
+        taxas: totalFees,
+        categoria: 'Vendas OS',
+        descricao: `Venda OS #${order.order_number}`,
+        data: new Date().toISOString().split('T')[0],
+        saleId: sale.id,
+        companyId: company.id,
       });
-
-      if (totalFees > 0) {
-        await base44.entities.AccountingEntry.create({
-          company_id: company.id, date: today,
-          type: 'debit', category: 'Taxas de Cartão',
-          description: `Taxa cartão OS #${order.order_number}`,
-          amount: totalFees, reference_id: sale.id, reference_type: 'sale',
-        });
-      }
+      for (const l of lancamentos) await base44.entities.AccountingEntry.create(l);
 
       // Update work order
       await base44.entities.WorkOrder.update(order.id, {

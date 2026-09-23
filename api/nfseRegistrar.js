@@ -24,7 +24,10 @@ export default async function handler(req, res) {
 
   if (!perfil?.company_id) return erro(res, 403, 'Seu acesso não está vinculado a nenhuma oficina.');
 
-  const { nfe_id: nfeId, chave_acesso: chave, xml_nfse: xmlNfse, erro: motivo } = req.body || {};
+  const {
+    nfe_id: nfeId, chave_acesso: chave, xml_nfse: xmlNfse,
+    xml_dps: xmlDps, erro: motivo,
+  } = req.body || {};
   if (!nfeId) return erro(res, 400, 'Informe a nota que está sendo registrada.');
   if (!chave && !motivo) return erro(res, 400, 'Informe a chave de acesso ou o motivo da recusa.');
 
@@ -54,16 +57,26 @@ export default async function handler(req, res) {
       return res.status(200).json({ status: 'rejeitada' });
     }
 
+    // Cada documento no seu lugar, e NUNCA apagando o que já existe.
+    //
+    // Antes isto gravava `xml_content: xmlNfse || null`: se o Sefin não
+    // devolvesse o XML da nota, o null apagava a DPS que estava ali, e a
+    // oficina ficava com uma nota autorizada e nenhum documento — nada
+    // para o contador, nada para o cliente. Um campo ausente na resposta
+    // não pode custar o documento que já estava guardado.
+    const campos = {
+      status: 'autorizada',
+      number: String(chave),
+      verification_code: String(chave),
+      authorized_at: new Date().toISOString(),
+      rejection_reason: null,
+    };
+    if (xmlNfse) campos.xml_content = xmlNfse;
+    if (xmlDps) campos.xml_dps = xmlDps;
+
     const { data: atualizada, error } = await supabase
       .from('nfe_records')
-      .update({
-        status: 'autorizada',
-        number: String(chave),
-        verification_code: String(chave),
-        xml_content: xmlNfse || null,
-        authorized_at: new Date().toISOString(),
-        rejection_reason: null,
-      })
+      .update(campos)
       .eq('id', nfeId)
       .select().single();
     if (error) {

@@ -49,8 +49,37 @@ export function nfseNoMes(notas, agora = new Date()) {
 // Quando a transmissão cai no meio, é esse Id que permite perguntar ao
 // Sefin se a nota existe lá (GET /dps/{id}). Sem ele, resta adivinhar.
 export function idDpsDaNota(nota) {
-  const xml = nota?.xml_content;
-  if (!xml) return null;
-  const m = xml.match(/<infDPS[^>]*\bId="(DPS[^"]+)"/);
-  return m ? m[1] : null;
+  // Procura primeiro no campo da DPS. xml_content fica de reserva para as
+  // notas gravadas antes de os dois documentos terem campos separados.
+  for (const xml of [nota?.xml_dps, nota?.xml_content]) {
+    if (!xml) continue;
+    const m = String(xml).match(/<infDPS[^>]*\bId="(DPS[^"]+)"/);
+    if (m) return m[1];
+  }
+  return null;
+}
+
+// Escolhe QUAL documento baixar e com que nome.
+//
+// São dois documentos diferentes e os dois importam:
+//   'nfse' — o que o governo devolveu; é ele que vale como nota;
+//   'dps'  — a declaração assinada pela oficina, o que foi declarado.
+//
+// Pedindo a nota, cai para a DPS quando a nota ainda não veio (emissão em
+// andamento, ou resposta do Sefin sem o XML). Pedindo a DPS, não
+// substitui por outra coisa: quem pede a DPS quer a DPS.
+export function escolherXml(nota, qual = 'nfse') {
+  const conteudo = qual === 'dps'
+    ? nota?.xml_dps
+    : (nota?.xml_content || nota?.xml_dps);
+
+  if (!conteudo) {
+    throw new Error(qual === 'dps'
+      ? 'Esta nota não tem a DPS guardada.'
+      : 'Esta nota não tem XML guardado.');
+  }
+
+  const ehDps = conteudo === nota?.xml_dps;
+  const id = nota?.number || nota?.rps_number || String(nota?.id || '').slice(-6);
+  return { conteudo, nome: `${ehDps ? 'DPS' : 'NFSe'}-${id}.xml`, ehDps };
 }

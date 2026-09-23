@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Plus, Trash2, ShoppingCart, CheckCircle2, Package, Search, X } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import { podeReceber } from '@/lib/compras';
 
 const STATUS_CONFIG = {
   rascunho: { label: 'Rascunho', color: 'bg-gray-100 text-gray-700' },
@@ -31,6 +32,7 @@ export default function Compras() {
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [recebendo, setRecebendo] = useState(null);
   const [form, setForm] = useState({
     supplier_id: '', expected_date: '', notes: '', items: []
   });
@@ -92,10 +94,24 @@ export default function Compras() {
   };
 
   const receivePurchase = async (purchase) => {
-    // Atualiza estoque das peças
+    // Receber soma ao estoque, e somar duas vezes nao se desfaz sozinho.
+    // O botao so sumia DEPOIS do recarregamento, entao um clique duplo
+    // dava entrada em dobro.
+    const barrou = podeReceber(purchase);
+    if (barrou) {
+      toast({ title: 'Não foi possível receber', description: barrou.erro, variant: 'destructive' });
+      return;
+    }
+    if (recebendo) return;
+    setRecebendo(purchase.id);
+
+    try {
     for (const item of purchase.items || []) {
       if (!item.part_id) continue;
-      const part = parts.find(p => p.id === item.part_id);
+      // Le o saldo do banco, nao da lista carregada ao abrir a tela: o
+      // estoque pode ter mudado numa venda enquanto a pagina estava
+      // aberta, e somar sobre um saldo velho apagaria essa saida.
+      const part = await base44.entities.Part.get(item.part_id).catch(() => null);
       if (!part) continue;
       const newQty = (part.stock_quantity || 0) + (item.quantity || 0);
       await base44.entities.Part.update(part.id, { stock_quantity: newQty, cost_price: item.unit_cost || part.cost_price });
@@ -112,9 +128,19 @@ export default function Compras() {
         new_stock: newQty,
       });
     }
-    await base44.entities.Purchase.update(purchase.id, { status: 'recebida', received_date: new Date().toISOString().split('T')[0] });
-    toast({ title: 'Compra recebida! Estoque atualizado.' });
-    loadData();
+      await base44.entities.Purchase.update(purchase.id, {
+        status: 'recebida', received_date: new Date().toISOString().split('T')[0],
+      });
+      toast({
+        title: 'Compra recebida',
+        description: 'Estoque atualizado. Lance a conta em Contas a Pagar para a despesa entrar no caixa.',
+      });
+      loadData();
+    } catch (e) {
+      toast({ title: 'Erro ao receber', description: e.message, variant: 'destructive' });
+    } finally {
+      setRecebendo(null);
+    }
   };
 
   const filtered = purchases.filter(p =>
@@ -178,7 +204,8 @@ export default function Compras() {
                     </div>
                   )}
                   {p.status !== 'recebida' && p.status !== 'cancelada' && (
-                    <Button size="sm" className="mt-3 bg-green-600 hover:bg-green-700 text-white" onClick={() => receivePurchase(p)}>
+                    <Button size="sm" className="mt-3 bg-green-600 hover:bg-green-700 text-white"
+                      disabled={!!recebendo} onClick={() => receivePurchase(p)}>
                       <CheckCircle2 className="w-4 h-4 mr-2" />Reber Mercadoria
                     </Button>
                   )}

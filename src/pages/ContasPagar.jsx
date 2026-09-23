@@ -12,6 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Plus, Trash2, CheckCircle2, Calendar, Wallet, AlertTriangle, Search } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import { podePagar, impactoExclusaoConta } from '@/lib/compras';
 
 const CATEGORIES = [
   { value: 'aluguel', label: 'Aluguel' },
@@ -43,6 +44,7 @@ export default function ContasPagar() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [ocupado, setOcupado] = useState(null);
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
 
@@ -96,28 +98,66 @@ export default function ContasPagar() {
   };
 
   const markPaid = async (bill) => {
-    const today = new Date().toISOString().split('T')[0];
-    await base44.entities.Bill.update(bill.id, { status: 'pago', payment_date: today });
-    // Accounting entry
-    await base44.entities.AccountingEntry.create({
-      company_id: company.id,
-      date: today,
-      type: 'debit',
-      category: bill.category,
-      description: `Pg: ${bill.description}`,
-      amount: bill.amount,
-      reference_type: 'manual',
-      reference_id: bill.id,
-    });
-    toast({ title: 'Conta marcada como paga' });
-    loadData();
+    // Marcar como paga lança uma saída no caixa. O botão só sumia DEPOIS
+    // do recarregamento, então um clique duplo lançava a despesa em
+    // dobro — e um débito a mais some no meio do relatório do mês.
+    const barrou = podePagar(bill);
+    if (barrou) {
+      toast({ title: 'Não foi possível pagar', description: barrou.erro, variant: 'destructive' });
+      return;
+    }
+    if (ocupado) return;
+    setOcupado(bill.id);
+
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      await base44.entities.Bill.update(bill.id, { status: 'pago', payment_date: today });
+      await base44.entities.AccountingEntry.create({
+        company_id: company.id,
+        date: today,
+        type: 'debit',
+        category: bill.category,
+        description: `Pg: ${bill.description}`,
+        amount: bill.amount,
+        reference_type: 'manual',
+        reference_id: bill.id,
+      });
+      toast({ title: 'Conta marcada como paga' });
+      loadData();
+    } catch (e) {
+      toast({ title: 'Erro ao pagar', description: e.message, variant: 'destructive' });
+    } finally {
+      setOcupado(null);
+    }
   };
 
   const handleDelete = async (bill) => {
-    if (!confirm('Excluir esta conta?')) return;
-    await base44.entities.Bill.delete(bill.id);
-    toast({ title: 'Conta excluída' });
-    loadData();
+    const impacto = impactoExclusaoConta(bill);
+
+    // Excluir uma conta JÁ PAGA deixava a saída no caixa sem nada atrás
+    // dela: o relatório mostrava a despesa e ninguém sabia de onde vinha.
+    const pergunta = impacto.paga
+      ? `Esta conta está PAGA (${formatCurrency(impacto.valor)}).\n\n`
+        + 'Excluir remove também o lançamento de saída no caixa — use isto '
+        + 'só se a conta foi registrada por engano. Se o pagamento aconteceu '
+        + 'de verdade, deixe-a no histórico.\n\nExcluir mesmo assim?'
+      : 'Excluir esta conta?';
+
+    if (!confirm(pergunta)) return;
+
+    try {
+      if (impacto.removeLancamento) {
+        await base44.entities.AccountingEntry.deleteMany({ reference_id: bill.id });
+      }
+      await base44.entities.Bill.delete(bill.id);
+      toast({
+        title: 'Conta excluída',
+        description: impacto.removeLancamento ? 'O lançamento no caixa saiu junto.' : undefined,
+      });
+      loadData();
+    } catch (e) {
+      toast({ title: 'Erro ao excluir', description: e.message, variant: 'destructive' });
+    }
   };
 
   const filtered = bills.filter(b => {
@@ -216,7 +256,8 @@ export default function ContasPagar() {
                 </div>
                 <p className="text-sm font-bold text-gray-900">{formatCurrency(bill.amount)}</p>
                 {bill.status !== 'pago' && (
-                  <Button size="sm" variant="outline" onClick={() => markPaid(bill)} className="text-green-600 border-green-200 hover:bg-green-50">
+                  <Button size="sm" variant="outline" disabled={!!ocupado} onClick={() => markPaid(bill)}
+                    className="text-green-600 border-green-200 hover:bg-green-50">
                     <CheckCircle2 className="w-4 h-4" />
                   </Button>
                 )}

@@ -17,7 +17,8 @@
 // para o provedor, nem para lugar nenhum.
 
 import { base44 } from '@/api/base44Client';
-export { pendenciasNfse, nfseNoMes, idDpsDaNota, MODELO_LABEL } from './nfse-dados';
+export { pendenciasNfse, nfseNoMes, idDpsDaNota, escolherXml, MODELO_LABEL } from './nfse-dados';
+import { escolherXml } from './nfse-dados';
 
 // A ponte é injetada pelo aplicativo desktop (preload.js). Num navegador
 // comum ela simplesmente não existe.
@@ -99,6 +100,9 @@ export async function emitirNfse(workOrderId, onEtapa = () => {}) {
     nfe_id: preparo.nfe_id,
     chave_acesso: resposta.dados.chaveAcesso,
     xml_nfse: resposta.dados.xmlNfse,
+    // A DPS assinada é o que a oficina declarou; guardar só o retorno do
+    // governo perderia essa metade.
+    xml_dps: resposta.dados.xmlDpsAssinada,
   });
 
   return {
@@ -121,12 +125,11 @@ export async function consultarNaSefin(chaveAcesso, producao = false) {
   return r.dados;
 }
 
-// Baixa o XML da nota. É o arquivo que o contador precisa — e o que vale
-// como documento, por ser o que o governo assinou e devolveu.
-export function baixarXml(nota) {
-  if (!nota?.xml_content) throw new Error('Esta nota não tem XML guardado.');
-  const nome = `NFSe-${nota.number || nota.rps_number || nota.id.slice(-6)}.xml`;
-  const url = URL.createObjectURL(new Blob([nota.xml_content], { type: 'application/xml' }));
+// Baixa o XML da nota. A escolha de qual documento e o nome do arquivo
+// ficam em nfse-dados.js (puro); aqui sobra só o empurrão no navegador.
+export function baixarXml(nota, qual = 'nfse') {
+  const { conteudo, nome } = escolherXml(nota, qual);
+  const url = URL.createObjectURL(new Blob([conteudo], { type: 'application/xml' }));
   const a = document.createElement('a');
   a.href = url;
   a.download = nome;

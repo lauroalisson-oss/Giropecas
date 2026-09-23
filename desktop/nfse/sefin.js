@@ -87,6 +87,9 @@ function interpretar(resposta) {
     return { ok: true, status, chaveAcesso: chave, xmlNfse, bruto: json };
   }
 
+  // Um evento (cancelamento) responde com retEvento, sem chave de acesso.
+  if (status === 204) return { ok: true, status, chaveAcesso: null, xmlNfse: null, bruto: null };
+
   // O Sefin devolve a lista de erros com código e descrição.
   const erros = json?.erros || json?.errors || [];
   const mensagem = erros.length

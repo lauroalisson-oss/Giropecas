@@ -122,7 +122,9 @@ export default async function handler(req, res) {
         total_amount: dps.total,
         iss_amount: dps.iss,
         items: itens,
-        xml_content: dps.xml,
+        // A DPS fica no campo dela. xml_content é reservado ao XML que o
+        // governo devolve — são documentos diferentes e os dois importam.
+        xml_dps: dps.xml,
         emitted_at: new Date().toISOString(),
         created_by: user.email,
       })

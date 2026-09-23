@@ -54,6 +54,21 @@ function registrar() {
       throw err;
     }
 
+    // O Sefin respondeu sucesso, mas sem a chave de acesso. Isso não pode
+    // passar batido: a nota provavelmente existe lá, e tratar como sucesso
+    // silencioso deixaria a oficina sem o documento e sem saber disso.
+    // O erro carrega a resposta crua, que é o que permite descobrir se o
+    // campo mudou de nome.
+    if (!resultado.chaveAcesso) {
+      const err = new Error(
+        'O Sefin aceitou a nota mas não devolveu a chave de acesso. '
+        + 'Use "Verificar no Sefin" nesta nota para recuperá-la. '
+        + `(resposta: ${JSON.stringify(resultado.bruto || {}).slice(0, 300)})`,
+      );
+      err.semChave = true;
+      throw err;
+    }
+
     return {
       chaveAcesso: resultado.chaveAcesso,
       xmlNfse: resultado.xmlNfse,

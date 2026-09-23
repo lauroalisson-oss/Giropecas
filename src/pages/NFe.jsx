@@ -66,9 +66,9 @@ export default function NFe() {
     }
   };
 
-  const baixar = (nota) => {
+  const baixar = (nota, qual = 'nfse') => {
     try {
-      const nome = baixarXml(nota);
+      const nome = baixarXml(nota, qual);
       toast({ title: 'XML baixado', description: nome });
     } catch (e) {
       toast({ title: 'Sem XML para baixar', description: e.message, variant: 'destructive' });
@@ -357,10 +357,18 @@ export default function NFe() {
                       <div className="text-right flex-shrink-0">
                         <p className="font-bold text-gray-900">{formatCurrency(nota.total_amount)}</p>
                         <div className="flex gap-1 mt-1 items-center justify-end flex-wrap">
-                          {nota.xml_content && (
+                          {(nota.xml_content || nota.xml_dps) && (
                             <Button size="sm" variant="ghost" className="h-7 px-2 text-xs"
-                              onClick={() => baixar(nota)}>
+                              title="XML da nota — é o que vale como documento"
+                              onClick={() => baixar(nota, 'nfse')}>
                               <Download className="w-3 h-3 mr-1" />XML
+                            </Button>
+                          )}
+                          {nota.xml_dps && nota.xml_content && (
+                            <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-gray-500"
+                              title="DPS assinada — o que a oficina declarou"
+                              onClick={() => baixar(nota, 'dps')}>
+                              <Download className="w-3 h-3 mr-1" />DPS
                             </Button>
                           )}
                           {ehNfse && nota.number && noDesktop && (

@@ -4,7 +4,7 @@
 // contasse diferente, o lojista veria folga onde a emissão já está barrada
 // — e descobriria só na hora de emitir para o cliente.
 
-import { pendenciasNfse, nfseNoMes, idDpsDaNota } from '/home/user/Giropecas/src/lib/nfse-dados.js';
+import { pendenciasNfse, nfseNoMes, idDpsDaNota, escolherXml } from '/home/user/Giropecas/src/lib/nfse-dados.js';
 import { montarDps } from '/home/user/Giropecas/api/_lib/nfse-dps.js';
 
 let f = 0;
@@ -88,6 +88,36 @@ ok(idDpsDaNota({ xml_content: 'isso nao e xml' }) === null, 'texto solto devolve
 // O XML da NOTA (resposta do governo) nao e o da DPS.
 ok(idDpsDaNota({ xml_content: '<NFSe><infNFSe Id="NFS123">x</infNFSe></NFSe>' }) === null,
   'nao confunde o Id da NFS-e com o da DPS');
+
+console.log('--- Os dois documentos da nota ---');
+// A DPS (o que a oficina declarou) e a NFS-e (o que o governo devolveu)
+// sao documentos diferentes. Guardar so um perde metade da historia — e
+// gravar null por cima deixaria a oficina sem documento nenhum.
+ok(idDpsDaNota({ xml_dps: dps.xml }) === dps.id, 'le o Id do campo da DPS');
+ok(idDpsDaNota({ xml_dps: dps.xml, xml_content: '<NFSe><infNFSe Id="NFS1">x</infNFSe></NFSe>' }) === dps.id,
+  'com a nota ja gravada, ainda acha o Id da DPS');
+// Notas gravadas antes de os campos existirem guardavam a DPS em xml_content.
+ok(idDpsDaNota({ xml_content: dps.xml }) === dps.id, 'nota antiga: cai para xml_content');
+ok(idDpsDaNota({ xml_dps: null, xml_content: null }) === null, 'sem nenhum dos dois, devolve nulo');
+
+const recusa = (fn, oque) => { try { fn(); ok(false, oque + ' deveria falhar'); } catch { ok(true, oque + ' e recusado'); } };
+const nota = { id: 'abcdef123456', number: '5211...9999', xml_content: '<NFSe/>', xml_dps: dps.xml };
+
+ok(escolherXml(nota).ehDps === false, 'por padrao baixa a NOTA, nao a DPS');
+ok(escolherXml(nota).nome.startsWith('NFSe-'), 'nome do arquivo da nota comeca com NFSe-');
+ok(escolherXml(nota, 'dps').ehDps === true, 'pedindo a DPS, vem a DPS');
+ok(escolherXml(nota, 'dps').nome.startsWith('DPS-'), 'nome do arquivo da DPS comeca com DPS-');
+ok(escolherXml(nota, 'dps').conteudo === dps.xml, 'conteudo da DPS e o XML da DPS');
+
+// Emissao em andamento: a nota ainda nao voltou, mas a DPS ja existe.
+const emAndamento = { id: 'n2', rps_number: '7', xml_dps: dps.xml };
+ok(escolherXml(emAndamento).ehDps === true, 'sem a nota, cai para a DPS');
+ok(escolherXml(emAndamento).nome === 'DPS-7.xml', 'e avisa no nome que e a DPS');
+
+// Quem pede a DPS quer a DPS: nao serve entregar a nota no lugar.
+recusa(() => escolherXml({ id: 'n3', xml_content: '<NFSe/>' }, 'dps'), 'pedir DPS de nota sem DPS');
+recusa(() => escolherXml({ id: 'n4' }), 'nota sem documento nenhum');
+recusa(() => escolherXml(null), 'nota nula');
 
 console.log(f === 0 ? '\n✅ TELA DE NOTAS OK' : `\n❌ ${f} falha(s)`);
 process.exit(f ? 1 : 0);

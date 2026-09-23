@@ -61,7 +61,8 @@ if (puladas.length) {
 // A RLS é conferida por supabase/tests/rls.sql, que roda no SQL Editor
 // do Supabase (precisa do banco). Lembrar aqui evita que ela fique
 // esquecida só porque não cabe neste runner.
-console.log('\nℹ  Isolamento entre oficinas (RLS): rode supabase/tests/rls.sql');
-console.log('   no SQL Editor do Supabase. Ele cria, confere e desfaz — não grava nada.');
+console.log('\nℹ  Duas conferências rodam no SQL Editor do Supabase, não aqui:');
+console.log('   rls.sql          isolamento entre oficinas (cria, confere e desfaz)');
+console.log('   conferencia.sql  valores guardados x origem (somente leitura)');
 
 process.exit(falharam.length ? 1 : 0);

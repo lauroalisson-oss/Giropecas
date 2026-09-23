@@ -121,6 +121,66 @@ begin
     r := r || '[ok] A não renomeia a oficina B (bloqueado)' || chr(10);
   end;
 
+  -- ===================== Escalada de privilégio =======================
+  -- Ler a linha certa não basta: a política de UPDATE dizia QUAIS LINHAS o
+  -- usuário alcança e nenhuma dizia QUAIS COLUNAS ele pode mexer. Com isso,
+  -- a oficina A reescrevia a própria licença (plano, limite e vencimento) e
+  -- — pior — se promovia a super-admin com um UPDATE no próprio perfil,
+  -- passando a enxergar todas as oficinas. Foi reproduzido no banco de
+  -- produção antes do conserto. Estas linhas existem para que não volte.
+
+  update public.profiles set is_super_admin = true where id = uA;
+  get diagnostics n = row_count;
+  if n <> 0 then falhas := falhas + 1; end if;
+  r := r || format('[%s] A não se promove a super-admin (%s linhas)%s',
+    case when n = 0 then 'ok' else 'FALHA' end, n, chr(10));
+
+  -- Se a linha acima tiver passado, esta mostra o tamanho do estrago.
+  select count(*) into n from public.companies;
+  if n <> 1 then falhas := falhas + 1; end if;
+  r := r || format('[%s] A continua vendo só a própria oficina (viu %s)%s',
+    case when n = 1 then 'ok' else 'FALHA' end, n, chr(10));
+
+  update public.profiles set company_id = B where id = uA;
+  get diagnostics n = row_count;
+  if n <> 0 then falhas := falhas + 1; end if;
+  r := r || format('[%s] A não se muda para dentro da oficina B (%s linhas)%s',
+    case when n = 0 then 'ok' else 'FALHA' end, n, chr(10));
+
+  update public.access_keys
+     set expires_at = now() + interval '30 years', status = 'active',
+         plan_type = 'fiscal', fiscal_note_limit = 999999
+   where activated_by = 'rls-a@teste.invalid';
+  get diagnostics n = row_count;
+  if n <> 0 then falhas := falhas + 1; end if;
+  r := r || format('[%s] A não estende nem melhora a própria licença (%s linhas)%s',
+    case when n = 0 then 'ok' else 'FALHA' end, n, chr(10));
+
+  -- Plano e limite também moram em companies, tabela que a oficina PRECISA
+  -- poder editar. Lá quem segura é o gatilho, não a política.
+  begin
+    update public.companies set plan_type = 'fiscal', fiscal_note_limit = 999999 where id = A;
+    falhas := falhas + 1;
+    r := r || '[FALHA] A CONSEGUIU mudar o próprio plano em companies' || chr(10);
+  exception when others then
+    r := r || '[ok] A não muda o próprio plano em companies' || chr(10);
+  end;
+
+  -- E o que ela legitimamente edita tem de continuar funcionando: se esta
+  -- linha falhar, a trava acima apertou demais e quebrou Configurações.
+  update public.companies set name = 'Oficina A (renomeada)', iss_rate = 3 where id = A;
+  get diagnostics n = row_count;
+  if n <> 1 then falhas := falhas + 1; end if;
+  r := r || format('[%s] A ainda edita os próprios dados de cadastro (%s linhas)%s',
+    case when n = 1 then 'ok' else 'FALHA' end, n, chr(10));
+
+  -- A função que substituiu a escrita direta: só carimba 'expired', e só
+  -- quando a data já passou. A licença da A está em dia, então: 0 linhas.
+  select public.marcar_licenca_vencida() into n;
+  if n <> 0 then falhas := falhas + 1; end if;
+  r := r || format('[%s] marcar_licenca_vencida não mexe em licença em dia (%s linhas)%s',
+    case when n = 0 then 'ok' else 'FALHA' end, n, chr(10));
+
   -- ===================== Provedor (super-admin) =======================
   perform set_config('request.jwt.claims',
     json_build_object('sub', uS::text, 'role', 'authenticated', 'email', 'rls-s@teste.invalid')::text, true);
@@ -134,6 +194,29 @@ begin
   if n <> 2 then falhas := falhas + 1; end if;
   r := r || format('[%s] super-admin vê os dois clientes (viu %s)%s',
     case when n = 2 then 'ok' else 'FALHA' end, n, chr(10));
+
+  -- O provedor entra no banco com o MESMO papel do lojista (authenticated);
+  -- quem separa os dois é só a política. Fechar a escrita do lojista sem
+  -- fechar a do provedor é a parte que dá errado — e é o painel Admin que
+  -- para de funcionar. Estas três linhas conferem que ele continua de pé.
+  update public.access_keys set expires_at = now() + interval '365 days', plan_type = 'fiscal'
+   where activated_by = 'rls-a@teste.invalid';
+  get diagnostics n = row_count;
+  if n <> 1 then falhas := falhas + 1; end if;
+  r := r || format('[%s] provedor renova a licença da A (%s linhas)%s',
+    case when n = 1 then 'ok' else 'FALHA' end, n, chr(10));
+
+  update public.profiles set role = 'owner' where id = uA;
+  get diagnostics n = row_count;
+  if n <> 1 then falhas := falhas + 1; end if;
+  r := r || format('[%s] provedor ainda edita perfis (%s linhas)%s',
+    case when n = 1 then 'ok' else 'FALHA' end, n, chr(10));
+
+  update public.companies set plan_type = 'fiscal', fiscal_note_limit = 500 where id = A;
+  get diagnostics n = row_count;
+  if n <> 1 then falhas := falhas + 1; end if;
+  r := r || format('[%s] provedor muda plano e limite em companies (%s linhas)%s',
+    case when n = 1 then 'ok' else 'FALHA' end, n, chr(10));
 
   -- ===================== Visitante não autenticado ====================
   perform set_config('request.jwt.claims', '', true);

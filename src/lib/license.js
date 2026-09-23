@@ -2,6 +2,10 @@
 // O mesmo algoritmo de geração/validação é usado pelo aplicativo offline
 // (offline-app/license.js) — mantenha os dois arquivos em sincronia.
 
+// O limite de notas vive em shared/ porque a rota de emissão, que roda no
+// servidor, precisa da mesma resposta que a tela.
+export { LIMITE_PADRAO_NOTAS, limiteDeNotas } from '../../shared/licenca.js';
+
 export const SUPER_ADMIN_EMAIL = 'lauro.alisson@gmail.com';
 
 // Alfabeto de 32 caracteres sem os ambíguos (0/O, 1/I)
@@ -130,4 +134,30 @@ export function daysRemaining(expiresAt) {
   if (!expiresAt) return 0;
   const ms = new Date(expiresAt).getTime() - Date.now();
   return Math.max(0, Math.floor(ms / (24 * 60 * 60 * 1000)));
+}
+
+// Renovação de uma licença — a conta que o painel do provedor faz ao
+// somar dias.
+//
+// Vive aqui, e não dentro da tela, porque era a única regra do sistema
+// cuja verificação REESCREVIA a fórmula em vez de chamá-la: o teste podia
+// passar com a tela errada. Agora os dois leem daqui.
+//
+// Vencida, o prazo conta de hoje (não adianta somar dias a um passado).
+// Em dia, soma ao que ainda resta — o cliente não perde o que já pagou.
+export function renovarLicenca(licenca, dias, agora = Date.now()) {
+  const d = Number(dias);
+  if (!Number.isFinite(d) || d <= 0) throw new Error(`Duração inválida: ${dias}`);
+
+  // Revogada NÃO conta como vencida: o bloqueio é do provedor, o prazo
+  // segue correndo. Ao religar, a oficina fica com os dias que já pagou.
+  const vencida = licenca?.status === 'expired' || isExpired(licenca?.expires_at);
+
+  const base = vencida ? agora : new Date(licenca.expires_at).getTime();
+  return {
+    vencida,
+    expires_at: new Date(base + d * 86400000).toISOString(),
+    status: 'active',
+    duration_days: d,
+  };
 }

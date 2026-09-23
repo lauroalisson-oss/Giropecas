@@ -7,6 +7,8 @@
 //
 // Devolve null quando está liberado, ou { status, mensagem } com o motivo.
 
+import { limiteDeNotas } from '../../shared/licenca.js';
+
 export function checarLicenca(licenca, agora = new Date()) {
   if (!licenca || licenca.status !== 'active') {
     return { status: 403, mensagem: 'Licença inativa. Solicite a renovação ao provedor.' };
@@ -24,7 +26,7 @@ export function checarLicenca(licenca, agora = new Date()) {
 }
 
 export function checarLimiteMensal(licenca, emitidasNoMes) {
-  const limite = Number(licenca?.fiscal_note_limit) || 100;
+  const limite = limiteDeNotas(licenca?.fiscal_note_limit);
   const usadas = Number(emitidasNoMes) || 0;
   if (usadas >= limite) {
     return {

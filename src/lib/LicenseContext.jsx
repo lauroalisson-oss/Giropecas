@@ -11,7 +11,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useAuth } from '@/lib/AuthContext';
-import { isSuperAdmin, isExpired } from '@/lib/license';
+import { isSuperAdmin, isExpired, daysRemaining, limiteDeNotas } from '@/lib/license';
 
 const LicenseContext = createContext(null);
 
@@ -52,10 +52,14 @@ export function LicenseProvider({ children }) {
       if (ativa.status === 'revoked') { setStatus('expired'); return; }
 
       if (isExpired(ativa.expires_at)) {
-        // Marca como vencida (melhor esforço — a política permite ao dono
-        // atualizar a própria chave). Se falhar, o bloqueio vale do mesmo jeito.
+        // Carimba a licença como vencida (melhor esforço). Vai por função
+        // no banco, não por UPDATE: a oficina não escreve na própria
+        // licença — se escrevesse, escreveria também o vencimento.
+        // A função só sabe marcar 'expired', só na licença de quem chamou
+        // e só quando a data já passou. Se falhar, o bloqueio abaixo vale
+        // do mesmo jeito: quem decide é a data, não a coluna.
         if (ativa.status !== 'expired') {
-          try { await base44.entities.AccessKey.update(ativa.id, { status: 'expired' }); } catch { /* ignore */ }
+          try { await base44.supabase.rpc('marcar_licenca_vencida'); } catch { /* ignore */ }
         }
         setStatus('expired');
         return;
@@ -73,15 +77,15 @@ export function LicenseProvider({ children }) {
 
   // Plano e limite vêm da LICENÇA ativa (fonte da verdade do período).
   const planType = superAdmin ? 'fiscal' : (license?.plan_type || 'non_fiscal');
-  const noteLimit = superAdmin ? Infinity : (license?.fiscal_note_limit || 100);
+  const noteLimit = superAdmin ? Infinity : limiteDeNotas(license?.fiscal_note_limit);
   const isFiscal = planType === 'fiscal';
 
   const value = {
     status, license, superAdmin, planType, noteLimit, isFiscal, refresh,
-    // Dias restantes, para o aviso de vencimento próximo.
-    diasRestantes: license?.expires_at
-      ? Math.ceil((new Date(license.expires_at) - Date.now()) / 86400000)
-      : null,
+    // Dias restantes, para o aviso de vencimento próximo. Sai da mesma
+    // função do menu e do painel do provedor — esta linha arredondava
+    // para cima e mostrava um dia a mais do que as outras duas telas.
+    diasRestantes: license?.expires_at ? daysRemaining(license.expires_at) : null,
   };
 
   return <LicenseContext.Provider value={value}>{children}</LicenseContext.Provider>;

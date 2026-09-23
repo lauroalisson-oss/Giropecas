@@ -11,7 +11,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Navigate } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
 import { useAuth } from '@/lib/AuthContext';
-import { isSuperAdmin, durationLabel, DURATION_OPTIONS, isExpired, daysRemaining } from '@/lib/license';
+import {
+  isSuperAdmin, durationLabel, DURATION_OPTIONS, isExpired, daysRemaining,
+  limiteDeNotas, renovarLicenca,
+} from '@/lib/license';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -309,7 +312,7 @@ function OficinaLinha({ empresa, licenca, selo, toast, onSaved }) {
             )}
             {licenca?.plan_type === 'fiscal' && (
               <span className="flex items-center gap-1">
-                <KeyRound className="w-3 h-3" />{licenca.fiscal_note_limit || 100} notas/mês
+                <KeyRound className="w-3 h-3" />{limiteDeNotas(licenca.fiscal_note_limit)} notas/mês
               </span>
             )}
           </div>
@@ -344,18 +347,22 @@ function GerenciarLicenca({ licenca, toast, onSaved, onCancel }) {
   const salvar = async () => {
     setSalvando(true);
     try {
+      const digitado = parseInt(limite, 10);
       const patch = {
         plan_type: plano,
-        fiscal_note_limit: plano === 'fiscal' ? Math.max(0, parseInt(limite, 10) || 100) : null,
+        // Number.isFinite e não `|| 100`: digitar 0 tem de gravar 0.
+        fiscal_note_limit: plano === 'fiscal'
+          ? Math.max(0, Number.isFinite(digitado) ? digitado : limiteDeNotas(null))
+          : null,
       };
 
-      // Renovar: conta a partir de hoje se já venceu, ou soma ao prazo atual.
+      // A conta da renovação mora em lib/license.js — é a mesma que a
+      // suíte confere. Enquanto estava escrita aqui dentro, o teste
+      // reescrevia a fórmula e podia passar com esta tela errada.
       if (renovar) {
-        const dias = Number(renovar);
-        const base = vencida ? Date.now() : new Date(licenca.expires_at).getTime();
-        patch.expires_at = new Date(base + dias * 86400000).toISOString();
-        patch.status = 'active';
-        patch.duration_days = dias;
+        // `vencida` fica de fora: é explicação, não coluna da tabela.
+        const { vencida: _, ...prazo } = renovarLicenca(licenca, renovar);
+        Object.assign(patch, prazo);
       }
 
       await base44.entities.AccessKey.update(licenca.id, patch);

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useCompany } from '@/lib/CompanyContext';
 import { useLicense } from '@/lib/LicenseContext';
+import { limiteDeNotas } from '@/lib/license';
 import { formatCurrency, formatDateTime } from '@/lib/formatters';
 import { NFE_STATUS_LABEL, NFE_STATUS_COLOR } from '@/lib/fiscal';
 import {
@@ -157,7 +158,8 @@ export default function NFe() {
   // servidor já recusa.
   const usadasNoMes = useMemo(() => nfseNoMes(nfes), [nfes]);
 
-  const noteLimit = Number.isFinite(planNoteLimit) ? planNoteLimit : (company?.fiscal_note_limit || 100);
+  const noteLimit = Number.isFinite(planNoteLimit)
+    ? planNoteLimit : limiteDeNotas(company?.fiscal_note_limit);
   const limitReached = usadasNoMes >= noteLimit;
   const nearLimit = usadasNoMes >= noteLimit * 0.9;
   const pendencias = pendenciasNfse(company);

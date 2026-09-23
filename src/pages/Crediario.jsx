@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Search, CreditCard, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Printer, Edit2, Save, X } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import { validarPagamento, aplicarPagamento, emAberto } from '@/lib/crediario';
 import CarneModal from '@/components/CarneModal';
 
 export default function Crediario() {
@@ -105,16 +106,19 @@ export default function Crediario() {
     setPaying(true);
     try {
       const amount = parseFloat(paymentAmount);
-      const newPaid = (payingTitle.paid_amount || 0) + amount;
-      const newRemaining = Math.max(0, (payingTitle.total_amount || 0) - newPaid);
-      const newStatus = newRemaining <= 0.01 ? 'pago' : 'pago_parcial';
 
-      await base44.entities.CreditTitle.update(payingTitle.id, {
-        paid_amount: newPaid,
-        remaining_amount: newRemaining,
-        status: newStatus,
-        payment_date: paymentDate,
-      });
+      // Confere ANTES de gravar: o lançamento no caixa que vem logo
+      // abaixo não se desfaz sozinho, e um recebimento a mais some no
+      // meio do relatório do mês.
+      const barrou = validarPagamento({ titulo: payingTitle, valor: amount });
+      if (barrou) {
+        toast({ title: 'Não foi possível receber', description: barrou.erro, variant: 'destructive' });
+        setPaying(false);
+        return;
+      }
+
+      await base44.entities.CreditTitle.update(payingTitle.id,
+        aplicarPagamento({ titulo: payingTitle, valor: amount, data: paymentDate }));
       await base44.entities.AccountingEntry.create({
         company_id: company.id,
         date: paymentDate,
@@ -313,7 +317,7 @@ export default function Crediario() {
                             {/* Confirm payment */}
                             {isPending && (
                               <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white h-7 px-2 text-xs"
-                                onClick={() => { setPayingTitle(title); setPaymentAmount(String(title.remaining_amount)); }}>
+                                onClick={() => { setPayingTitle(title); setPaymentAmount(String(emAberto(title))); }}>
                                 <CheckCircle className="w-3 h-3 mr-1" />Receber
                               </Button>
                             )}
@@ -340,7 +344,7 @@ export default function Crediario() {
               <div className="bg-gray-50 rounded-lg p-3">
                 <p className="text-xs text-gray-500">Parcela {payingTitle.installment_number}/{payingTitle.total_installments}</p>
                 <p className="text-base font-bold">{customers[payingTitle.customer_id]?.name}</p>
-                <p className="text-sm">Saldo: <span className="font-bold text-red-600">{formatCurrency(payingTitle.remaining_amount)}</span></p>
+                <p className="text-sm">Saldo: <span className="font-bold text-red-600">{formatCurrency(emAberto(payingTitle))}</span></p>
               </div>
               <div>
                 <Label>Valor recebido (R$)</Label>

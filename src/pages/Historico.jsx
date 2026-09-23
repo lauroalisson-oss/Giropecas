@@ -16,6 +16,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { printDocument } from '@/components/PrintReceipt';
 import { revisoesDaOrdem } from '@/lib/crm';
 import { saldoADevolver } from '@/lib/estoque';
+import { resumoCrediario } from '@/lib/crediario';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import EmitirNotaButton from '@/components/EmitirNotaButton';
 import EmitirNfseButton from '@/components/EmitirNfseButton';
@@ -66,6 +67,7 @@ export default function Historico() {
   const [parts, setParts] = useState([]);
   const [technicians, setTechnicians] = useState([]);
   const [nfes, setNfes] = useState([]);
+  const [creditTitles, setCreditTitles] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // Filters
@@ -87,7 +89,7 @@ export default function Historico() {
 
   const loadData = async () => {
     setLoading(true);
-    const [ord, sal, custs, svcs, pts, techs, notas, vehs] = await Promise.all([
+    const [ord, sal, custs, svcs, pts, techs, notas, vehs, titulos] = await Promise.all([
       base44.entities.WorkOrder.filter({ company_id: company.id }, '-created_date', 200),
       base44.entities.Sale.filter({ company_id: company.id }, '-created_date', 200),
       base44.entities.Customer.filter({ company_id: company.id }),
@@ -96,6 +98,7 @@ export default function Historico() {
       base44.entities.Technician.filter({ company_id: company.id }),
       base44.entities.NFeRecord.filter({ company_id: company.id }, '-created_date', 300).catch(() => []),
       base44.entities.Vehicle.filter({ company_id: company.id }).catch(() => []),
+      base44.entities.CreditTitle.filter({ company_id: company.id }, '-due_date', 500).catch(() => []),
     ]);
     setOrders(ord);
     setSales(sal);
@@ -105,6 +108,7 @@ export default function Historico() {
     setParts(pts);
     setTechnicians(techs);
     setNfes(notas);
+    setCreditTitles(titulos);
     setLoading(false);
   };
 
@@ -198,6 +202,24 @@ export default function Historico() {
 
   const totalOS = filteredOrders.reduce((s, o) => s + (o.total || 0), 0);
   const totalPDV = filteredPdvSales.reduce((s, sv) => s + (sv.total || 0), 0);
+
+  // O que a exclusão vai realmente atingir, para o aviso não prometer
+  // (nem esconder) o que não vai acontecer.
+  const impactoDaExclusao = (tipo, item) => {
+    if (!item) return null;
+    const saleId = tipo === 'order' ? item.sale_id : item.id;
+    const pago = tipo === 'order' ? !!item.sale_id : true;
+    return {
+      // A baixa de estoque só acontece no pagamento.
+      devolveEstoque: pago
+        && (tipo === 'order'
+          ? (item.parts_items || []).some(i => i.part_id)
+          : (item.items || []).some(i => i.part_id)),
+      crediario: saleId
+        ? resumoCrediario(creditTitles.filter(t => t.sale_id === saleId))
+        : resumoCrediario([]),
+    };
+  };
 
   // Devolve ao estoque o que REALMENTE saiu por conta deste documento.
   //
@@ -634,14 +656,38 @@ export default function Historico() {
                   ? `Tem certeza que deseja excluir a OS #${confirmDelete.item.order_number || confirmDelete.item.id.slice(-6)}?`
                   : `Tem certeza que deseja excluir a venda PDV #${confirmDelete.item.sale_number || confirmDelete.item.id.slice(-6)}?`}
               </p>
-              {(confirmDelete.type === 'order'
-                ? (confirmDelete.item.parts_items || []).length > 0
-                : (confirmDelete.item.items || []).some(i => i.part_id)
-              ) && (
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
-                  <strong>⚠️ As peças usadas serão devolvidas ao estoque automaticamente.</strong>
-                </div>
-              )}
+              {(() => {
+                const impacto = impactoDaExclusao(confirmDelete.type, confirmDelete.item);
+                return (
+                  <>
+                    {impacto?.devolveEstoque && (
+                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
+                        <strong>As peças baixadas voltam ao estoque.</strong> Peças lançadas
+                        mas não pagas não são somadas — elas nunca saíram.
+                      </div>
+                    )}
+                    {impacto?.crediario?.comPagamento > 0 && (
+                      <div className="bg-red-50 border border-red-300 rounded-lg p-3 text-xs text-red-800 space-y-1">
+                        <p className="font-semibold">⚠️ Este documento tem crediário com pagamento.</p>
+                        <p>
+                          {impacto.crediario.titulos} parcela(s), {formatCurrency(impacto.crediario.recebido)} já
+                          recebido(s) e {formatCurrency(impacto.crediario.aReceber)} em aberto.
+                        </p>
+                        <p>
+                          Excluir apaga as parcelas: a dívida do cliente some do sistema,
+                          mas os recebimentos já lançados no caixa permanecem.
+                        </p>
+                      </div>
+                    )}
+                    {impacto?.crediario?.titulos > 0 && impacto.crediario.comPagamento === 0 && (
+                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
+                        {impacto.crediario.titulos} parcela(s) de crediário serão apagadas
+                        ({formatCurrency(impacto.crediario.aReceber)} em aberto).
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
               <div className="flex gap-3 pt-1">
                 <Button variant="outline" onClick={() => setConfirmDelete(null)} className="flex-1" disabled={deleting}>
                   Cancelar

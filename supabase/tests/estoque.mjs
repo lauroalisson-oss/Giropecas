@@ -5,7 +5,7 @@
 // peças sem olhar o que foi movimentado é o que fazia a exclusão de uma
 // OS nunca paga INVENTAR peças no estoque.
 
-import { saldoADevolver, temBaixaDeEstoque } from '/home/user/Giropecas/src/lib/estoque.js';
+import { saldoADevolver, temBaixaDeEstoque, faltaEmEstoque, avisoFaltaEmEstoque } from '/home/user/Giropecas/src/lib/estoque.js';
 
 let f = 0;
 const ok = (c, m) => { if (!c) { f++; console.log('FAIL:', m); } else console.log('ok:', m); };
@@ -73,6 +73,58 @@ ok(devolver.length === 2, 'cancelamento devolve as duas pecas');
 // Cancelada e, por engano, cancelada de novo (ou excluida em seguida).
 const depois = [...os101, volta('oleo', 2), volta('filtro', 1)];
 ok(saldoADevolver(depois).length === 0, 'repetir a operacao nao devolve de novo');
+
+console.log('--- Estoque que nao cobre a baixa ---');
+// Acontece de verdade: a peca foi instalada na moto, mas o cadastro
+// dizia ter menos. Math.max(0, ...) zerava e engolia a diferenca — a
+// oficina seguia achando que a contagem batia.
+const catalogo = {
+  oleo: { description: 'Oleo 20W50', stock_quantity: 5 },
+  filtro: { description: 'Filtro de oleo', stock_quantity: 1 },
+  vela: { description: 'Vela', stock_quantity: 0 },
+};
+
+ok(faltaEmEstoque([{ part_id: 'oleo', quantity: 3 }], catalogo).length === 0,
+  'saldo suficiente nao gera aviso');
+ok(faltaEmEstoque([{ part_id: 'oleo', quantity: 5 }], catalogo).length === 0,
+  'levar exatamente o saldo nao gera aviso');
+
+const falta = faltaEmEstoque([{ part_id: 'filtro', quantity: 3 }], catalogo);
+ok(falta.length === 1, 'saldo menor que o pedido gera aviso');
+ok(falta[0].falta === 2, `diz quanto faltou (deu ${falta[0].falta})`);
+ok(falta[0].saldo === 1 && falta[0].pedido === 3, 'guarda o saldo e o pedido');
+ok(falta[0].descricao === 'Filtro de oleo', 'usa a descricao do cadastro');
+
+ok(faltaEmEstoque([{ part_id: 'vela', quantity: 1 }], catalogo)[0].falta === 1,
+  'peca zerada: falta tudo o que saiu');
+
+const varias = faltaEmEstoque(
+  [{ part_id: 'oleo', quantity: 2 }, { part_id: 'filtro', quantity: 3 }, { part_id: 'vela', quantity: 1 }],
+  catalogo);
+ok(varias.length === 2, 'lista so as que faltaram, nao as que estavam ok');
+
+console.log('--- Entradas estranhas ---');
+ok(faltaEmEstoque([], catalogo).length === 0, 'lista vazia');
+ok(faltaEmEstoque(null, catalogo).length === 0, 'lista nula');
+ok(faltaEmEstoque([{ part_id: 'oleo', quantity: 3 }], null).length === 0, 'sem catalogo nao inventa falta');
+ok(faltaEmEstoque([{ part_id: 'nao-existe', quantity: 3 }], catalogo).length === 0,
+  'peca fora do catalogo e ignorada');
+ok(faltaEmEstoque([{ quantity: 3 }], catalogo).length === 0, 'item sem peca e ignorado');
+ok(faltaEmEstoque([{ part_id: 'filtro', quantity: 0 }], catalogo).length === 0, 'quantidade zero');
+ok(faltaEmEstoque([{ part_id: 'filtro', quantity: -2 }], catalogo).length === 0, 'quantidade negativa');
+ok(faltaEmEstoque([null, { part_id: 'filtro', quantity: 3 }], catalogo).length === 1, 'item nulo no meio');
+// Peca sem estoque cadastrado conta como zero, nao como "sem limite".
+ok(faltaEmEstoque([{ part_id: 'x', quantity: 1 }], { x: { description: 'X' } })[0].falta === 1,
+  'estoque nao cadastrado conta como zero');
+
+console.log('--- Aviso na tela ---');
+ok(avisoFaltaEmEstoque([]) === null, 'sem falta, sem aviso');
+ok(avisoFaltaEmEstoque(null) === null, 'lista nula, sem aviso');
+const aviso = avisoFaltaEmEstoque(varias);
+ok(/2 peça\(s\)/.test(aviso), 'diz quantas pecas');
+ok(/Filtro de oleo \(tinha 1, saiu 3\)/.test(aviso), 'mostra o que tinha e o que saiu');
+ok(/Confira a contagem/.test(aviso), 'diz o que fazer');
+ok(/foi registrada como aconteceu/.test(aviso), 'deixa claro que a baixa nao foi bloqueada');
 
 console.log(f === 0 ? '\n✅ DEVOLUCAO DE ESTOQUE OK' : `\n❌ ${f} falha(s)`);
 process.exit(f ? 1 : 0);

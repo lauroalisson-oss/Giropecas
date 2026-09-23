@@ -38,3 +38,52 @@ export function saldoADevolver(movimentos) {
 
 // Houve baixa de estoque por este documento?
 export const temBaixaDeEstoque = (movimentos) => saldoADevolver(movimentos).length > 0;
+
+// Peças cuja baixa vai deixar o estoque negativo.
+//
+// Isso acontece de verdade: a peça foi instalada na moto do cliente, mas
+// o cadastro dizia ter menos do que havia — ou alguém vendeu a mesma peça
+// no balcão enquanto a OS estava aberta.
+//
+// O que NÃO serve é esconder. `Math.max(0, saldo - qtd)` deixava o
+// estoque em zero e engolia a diferença: a oficina continuava achando
+// que a contagem batia, e só descobriria no balanço, sem saber onde
+// procurar. É melhor registrar o negativo e avisar na hora — negativo é
+// um recado de que a contagem precisa de conferência.
+export function faltaEmEstoque(itens, pecaPorId) {
+  const faltas = [];
+
+  for (const item of itens || []) {
+    const id = item?.part_id;
+    if (!id) continue;
+
+    const peca = pecaPorId?.[id];
+    if (!peca) continue;
+
+    const saldo = Number(peca.stock_quantity) || 0;
+    const qtd = Number(item.quantity) || 0;
+    if (qtd <= 0) continue;
+
+    if (qtd > saldo) {
+      faltas.push({
+        part_id: id,
+        descricao: peca.description || item.description || 'peça',
+        saldo,
+        pedido: qtd,
+        falta: qtd - saldo,
+      });
+    }
+  }
+
+  return faltas;
+}
+
+// Frase pronta para o aviso na tela.
+export function avisoFaltaEmEstoque(faltas) {
+  if (!faltas?.length) return null;
+  const lista = faltas
+    .map(f => `${f.descricao} (tinha ${f.saldo}, saiu ${f.pedido})`)
+    .join('; ');
+  return `O estoque ficou negativo em ${faltas.length} peça(s): ${lista}. `
+    + 'Confira a contagem — a baixa foi registrada como aconteceu.';
+}

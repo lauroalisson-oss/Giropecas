@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Search, Package, Trash2, ShoppingCart, CheckCircle, Plus, Minus, CreditCard, PlusCircle, X } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { dividirPagamento, lancamentosDaVenda } from '@/lib/caixa';
+import { faltaEmEstoque, avisoFaltaEmEstoque } from '@/lib/estoque';
 import { pendenciasCrediario } from '@/lib/crm';
 import StatusCrediario from '@/components/StatusCrediario';
 
@@ -180,20 +181,31 @@ export default function PDV() {
         status: 'pago',
       });
 
-      // Deduct stock
+      // Baixa de estoque. O saldo pode ficar negativo — a tela impede
+      // colocar no carrinho mais do que há, mas o estoque pode ter mudado
+      // entre montar o carrinho e fechar a venda. Zerar esconderia a
+      // diferença; registrar o negativo mostra que a contagem saiu do ar.
+      const faltasPdv = faltaEmEstoque(
+        cart.map(i => ({ part_id: i.part_id, quantity: i.quantity, description: i.description })),
+        Object.fromEntries(parts.map(p => [p.id, p])),
+      );
+
       for (const item of cart) {
         const part = parts.find(p => p.id === item.part_id);
         if (part) {
           const newStock = (part.stock_quantity || 0) - item.quantity;
-          await base44.entities.Part.update(item.part_id, { stock_quantity: Math.max(0, newStock) });
+          await base44.entities.Part.update(item.part_id, { stock_quantity: newStock });
           await base44.entities.StockMovement.create({
             company_id: company.id, part_id: item.part_id, type: 'saida',
             quantity: item.quantity, unit_cost: item.unit_price,
             reason: 'PDV', reference_id: sale.id, reference_type: 'sale',
-            previous_stock: part.stock_quantity, new_stock: Math.max(0, newStock),
+            previous_stock: part.stock_quantity, new_stock: newStock,
           });
         }
       }
+
+      const avisoPdv = avisoFaltaEmEstoque(faltasPdv);
+      if (avisoPdv) toast({ title: 'Estoque negativo', description: avisoPdv, variant: 'destructive' });
 
       // Generate credit titles for crediario payment
       if (hasCrediario) {

@@ -445,15 +445,29 @@
         var nextBtn = overlay.querySelector('#os-next');
         if (nextBtn) nextBtn.addEventListener('click', function () {
           if (st.next === 'concluida') {
-            // Baixa de estoque + registro de venda
+            // Baixa de estoque + registro de venda.
+            //
+            // O saldo pode ficar negativo: a peça foi conferida ao ser
+            // adicionada, mas pode ter sido vendida no balcão enquanto a
+            // OS ficou aberta. Zerar escondia a diferença — a oficina
+            // continuava achando que a contagem batia.
             var allPecas = dbGet('pecas');
+            var faltas = [];
             o.itens.forEach(function (i) {
               if (i.tipo === 'peca') {
                 var p = allPecas.find(function (x) { return x.id === i.pecaId; });
-                if (p) p.estoque = Math.max(0, (p.estoque || 0) - i.qtd);
+                if (!p) return;
+                var saldo = p.estoque || 0;
+                if (i.qtd > saldo) {
+                  faltas.push(i.nome + ' (tinha ' + saldo + ', saiu ' + i.qtd + ')');
+                }
+                p.estoque = saldo - i.qtd;
               }
             });
             dbSet('pecas', allPecas);
+            if (faltas.length) {
+              toast('Estoque negativo: ' + faltas.join('; ') + '. Confira a contagem.', true);
+            }
             var vendas = dbGet('vendas');
             vendas.push({
               id: uid(), origem: 'ordem', ref: 'OS #' + o.numero, cliente: o.cliente,

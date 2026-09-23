@@ -15,6 +15,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useToast } from '@/components/ui/use-toast';
 import { printDocument } from '@/components/PrintReceipt';
 import { revisoesDaOrdem } from '@/lib/crm';
+import { saldoADevolver } from '@/lib/estoque';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import EmitirNotaButton from '@/components/EmitirNotaButton';
 import EmitirNfseButton from '@/components/EmitirNfseButton';
@@ -198,30 +199,44 @@ export default function Historico() {
   const totalOS = filteredOrders.reduce((s, o) => s + (o.total || 0), 0);
   const totalPDV = filteredPdvSales.reduce((s, sv) => s + (sv.total || 0), 0);
 
-  // Restore stock for a list of items [{part_id, quantity}]
-  const restoreStock = async (items) => {
-    for (const item of (items || [])) {
-      if (!item.part_id) continue;
+  // Devolve ao estoque o que REALMENTE saiu por conta deste documento.
+  //
+  // Antes isto somava de volta a lista de peças do documento, sem olhar
+  // se alguma baixa tinha acontecido. Como a baixa só ocorre no
+  // pagamento, excluir uma OS nunca paga INVENTAVA peças no estoque — e
+  // a oficina passava a contar com peça que não tinha.
+  //
+  // Agora a conta sai dos movimentos gravados: saídas menos devoluções
+  // já feitas. Assim funciona para qualquer caminho e não devolve duas
+  // vezes se a operação for repetida.
+  const restoreStock = async (referenceId, motivo) => {
+    const movimentos = await base44.entities.StockMovement.filter({ reference_id: referenceId });
+    const pendentes = saldoADevolver(movimentos);
+
+    for (const item of pendentes) {
       const part = parts.find(p => p.id === item.part_id);
       if (!part) continue;
-      const newStock = (part.stock_quantity || 0) + (item.quantity || 0);
+      const newStock = (part.stock_quantity || 0) + item.quantity;
       await base44.entities.Part.update(item.part_id, { stock_quantity: newStock });
       await base44.entities.StockMovement.create({
         company_id: company.id, part_id: item.part_id, type: 'devolucao',
-        quantity: item.quantity, unit_cost: item.unit_price || 0,
-        reason: 'Exclusão de venda/OS via Histórico',
+        quantity: item.quantity, reason: motivo,
+        // Sem o reference_id a devolução não se liga à baixa, e a conta
+        // de "quanto ainda falta devolver" nunca fecharia.
+        reference_id: referenceId, reference_type: 'estorno',
         previous_stock: part.stock_quantity, new_stock: newStock,
       });
     }
+    return pendentes.length;
   };
 
   const handleDeleteOrder = async () => {
     const order = confirmDelete.item;
     setDeleting(true);
     try {
-      // Restore parts stock
-      await restoreStock(order.parts_items || []);
-      // Delete associated sale if faturada
+      // A baixa da OS é gravada com o id da própria OS.
+      const devolvidas = await restoreStock(order.id, `Exclusão da OS #${order.order_number || ''}`);
+
       if (order.sale_id) {
         const sale = osSales.find(s => s.id === order.sale_id);
         if (sale) {
@@ -231,7 +246,12 @@ export default function Historico() {
         }
       }
       await base44.entities.WorkOrder.delete(order.id);
-      toast({ title: 'OS excluída e estoque restaurado!' });
+      toast({
+        title: 'OS excluída',
+        description: devolvidas > 0
+          ? `${devolvidas} peça(s) devolvida(s) ao estoque.`
+          : 'Nenhuma peça a devolver — esta OS não tinha baixado estoque.',
+      });
       setConfirmDelete(null);
       loadData();
     } catch (e) {
@@ -245,14 +265,20 @@ export default function Historico() {
     const sale = confirmDelete.item;
     setDeleting(true);
     try {
-      // Restore parts stock
-      const partItems = (sale.items || []).filter(i => i.type === 'part' || i.part_id);
-      await restoreStock(partItems);
-      // Delete credit titles and accounting
+      // A baixa do PDV é gravada com o id da venda; a baixa vinda de uma
+      // OS usa o id da OS, então as duas são procuradas.
+      const devolvidas = (await restoreStock(sale.id, 'Exclusão de venda'))
+        + (sale.work_order_id ? await restoreStock(sale.work_order_id, 'Exclusão de venda da OS') : 0);
+
       await base44.entities.CreditTitle.deleteMany({ sale_id: sale.id });
       await base44.entities.AccountingEntry.deleteMany({ reference_id: sale.id });
       await base44.entities.Sale.delete(sale.id);
-      toast({ title: 'Venda excluída e estoque restaurado!' });
+      toast({
+        title: 'Venda excluída',
+        description: devolvidas > 0
+          ? `${devolvidas} peça(s) devolvida(s) ao estoque.`
+          : 'Nenhuma peça a devolver.',
+      });
       setConfirmDelete(null);
       loadData();
     } catch (e) {

@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
 import { dividirPagamento, lancamentosDaVenda } from '@/lib/caixa';
+import { avisoFaltaEmEstoque } from '@/lib/estoque';
 import { CreditCard, DollarSign, PlusCircle, X } from 'lucide-react';
 
 const ALL_METHODS = [
@@ -121,12 +122,22 @@ export default function PagamentoModal({ order, customer, onClose, onSuccess }) 
         status: 'pago',
       });
 
-      // Deduct stock
+      // Baixa de estoque.
+      //
+      // O saldo PODE ficar negativo, e isso é de propósito: a peça já foi
+      // instalada na moto do cliente. Zerar e engolir a diferença faria a
+      // oficina achar que a contagem bate.
+      const faltas = [];
       if (order.parts_items?.length > 0) {
         for (const item of order.parts_items) {
           if (item.part_id) {
             const part = await base44.entities.Part.get(item.part_id);
-            const newStock = Math.max(0, (part.stock_quantity || 0) - (item.quantity || 0));
+            const saldo = part.stock_quantity || 0;
+            const qtd = item.quantity || 0;
+            if (qtd > saldo) {
+              faltas.push({ part_id: item.part_id, descricao: part.description || item.description, saldo, pedido: qtd, falta: qtd - saldo });
+            }
+            const newStock = saldo - qtd;
             await base44.entities.Part.update(item.part_id, { stock_quantity: newStock });
             await base44.entities.StockMovement.create({
               company_id: company.id, part_id: item.part_id, type: 'saida',
@@ -137,6 +148,9 @@ export default function PagamentoModal({ order, customer, onClose, onSuccess }) 
           }
         }
       }
+
+      const aviso = avisoFaltaEmEstoque(faltas);
+      if (aviso) toast({ title: 'Estoque negativo', description: aviso, variant: 'destructive' });
 
       // Crediário titles
       if (hasCrediario) {

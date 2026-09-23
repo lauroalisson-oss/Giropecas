@@ -10,9 +10,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, Trash2, ShoppingCart, CheckCircle2, Package, Search, X } from 'lucide-react';
+import { Plus, Trash2, ShoppingCart, CheckCircle2, Package, Search, X, DollarSign } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
-import { podeReceber } from '@/lib/compras';
+import {
+  podeReceber, podeRegistrarPagamento, dataDePagamento,
+  lancamentoPagamentoCompra, situacaoCompra, aPagarEmCompras,
+} from '@/lib/compras';
 
 const STATUS_CONFIG = {
   rascunho: { label: 'Rascunho', color: 'bg-gray-100 text-gray-700' },
@@ -33,6 +36,10 @@ export default function Compras() {
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [recebendo, setRecebendo] = useState(null);
+  const [pagando, setPagando] = useState(null);
+  const [dataPgto, setDataPgto] = useState('');
+  const [formaPgto, setFormaPgto] = useState('pix');
+  const [salvandoPgto, setSalvandoPgto] = useState(false);
   const [form, setForm] = useState({
     supplier_id: '', expected_date: '', notes: '', items: []
   });
@@ -133,7 +140,7 @@ export default function Compras() {
       });
       toast({
         title: 'Compra recebida',
-        description: 'Estoque atualizado. Lance a conta em Contas a Pagar para a despesa entrar no caixa.',
+        description: 'Estoque atualizado. O custo entra no caixa quando você registrar o pagamento.',
       });
       loadData();
     } catch (e) {
@@ -142,6 +149,56 @@ export default function Compras() {
       setRecebendo(null);
     }
   };
+
+  const abrirPagamento = (compra) => {
+    const barrou = podeRegistrarPagamento(compra);
+    if (barrou) {
+      toast({ title: 'Não foi possível', description: barrou.erro, variant: 'destructive' });
+      return;
+    }
+    setPagando(compra);
+    // Sugere hoje, mas a oficina pode corrigir: um pagamento lançado com
+    // atraso tem de cair no mês em que aconteceu.
+    setDataPgto(new Date().toISOString().split('T')[0]);
+    setFormaPgto('pix');
+  };
+
+  const confirmarPagamento = async () => {
+    const compra = pagando;
+    const barrou = podeRegistrarPagamento(compra);
+    if (barrou) {
+      toast({ title: 'Não foi possível', description: barrou.erro, variant: 'destructive' });
+      return;
+    }
+    setSalvandoPgto(true);
+    try {
+      const quando = dataDePagamento(dataPgto);
+
+      // O custo entra no caixa AGORA, com a data em que o pagamento
+      // aconteceu — é isso que faz a despesa cair no mês certo.
+      await base44.entities.AccountingEntry.create(
+        lancamentoPagamentoCompra({ compra, data: quando, companyId: company.id }),
+      );
+      await base44.entities.Purchase.update(compra.id, {
+        payment_status: 'pago',
+        payment_date: quando,
+        payment_method: formaPgto,
+      });
+
+      toast({
+        title: 'Pagamento registrado',
+        description: `${formatCurrency(compra.total || 0)} lançado no caixa em ${formatDate(quando)}.`,
+      });
+      setPagando(null);
+      loadData();
+    } catch (e) {
+      toast({ title: 'Erro ao registrar', description: e.message, variant: 'destructive' });
+    } finally {
+      setSalvandoPgto(false);
+    }
+  };
+
+  const pendentes = aPagarEmCompras(purchases);
 
   const filtered = purchases.filter(p =>
     p.order_number?.toLowerCase().includes(search.toLowerCase()) ||
@@ -159,6 +216,23 @@ export default function Compras() {
           <Plus className="w-4 h-4 mr-2" />Nova OC
         </Button>
       </div>
+
+      {pendentes.quantidade > 0 && (
+        <Card className="mb-4 border-orange-200 bg-orange-50">
+          <CardContent className="p-4 flex items-start gap-3">
+            <DollarSign className="w-5 h-5 text-orange-600 mt-0.5 flex-shrink-0" />
+            <div className="text-sm">
+              <p className="font-semibold text-orange-900">
+                {pendentes.quantidade} compra(s) recebida(s) e ainda não paga(s) — {formatCurrency(pendentes.total)}
+              </p>
+              <p className="text-orange-800 mt-1">
+                As peças já estão no estoque. O custo só entra no caixa quando você registrar
+                o pagamento, com a data em que ele aconteceu.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="relative mb-4">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -192,6 +266,15 @@ export default function Compras() {
                     </div>
                     <div className="flex items-center gap-3">
                       <Badge className={STATUS_CONFIG[p.status]?.color}>{STATUS_CONFIG[p.status]?.label}</Badge>
+                      {p.status !== 'cancelada' && (
+                        situacaoCompra(p).paga ? (
+                          <Badge className="bg-blue-100 text-blue-700">
+                            Pago {p.payment_date ? `· ${formatDate(p.payment_date)}` : ''}
+                          </Badge>
+                        ) : (
+                          <Badge className="bg-orange-100 text-orange-700">Pgto pendente</Badge>
+                        )
+                      )}
                       <p className="font-bold text-gray-900">{formatCurrency(p.total || 0)}</p>
                     </div>
                   </div>
@@ -203,12 +286,21 @@ export default function Compras() {
                       {p.items.length > 3 && <span>+{p.items.length - 3} itens</span>}
                     </div>
                   )}
+                  <div className="flex gap-2 mt-3 flex-wrap">
                   {p.status !== 'recebida' && p.status !== 'cancelada' && (
-                    <Button size="sm" className="mt-3 bg-green-600 hover:bg-green-700 text-white"
+                    <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white"
                       disabled={!!recebendo} onClick={() => receivePurchase(p)}>
-                      <CheckCircle2 className="w-4 h-4 mr-2" />Reber Mercadoria
+                      <CheckCircle2 className="w-4 h-4 mr-2" />Receber mercadoria
                     </Button>
                   )}
+                  {p.status !== 'cancelada' && !situacaoCompra(p).paga && (
+                    <Button size="sm" variant="outline" disabled={!!pagando}
+                      className="border-blue-200 text-blue-700 hover:bg-blue-50"
+                      onClick={() => abrirPagamento(p)}>
+                      <DollarSign className="w-4 h-4 mr-2" />Registrar pagamento
+                    </Button>
+                  )}
+                  </div>
                 </CardContent>
               </Card>
             ))}
@@ -291,6 +383,56 @@ export default function Compras() {
             <Button variant="outline" onClick={() => setShowModal(false)}>Cancelar</Button>
             <Button onClick={handleSave} disabled={saving} className="bg-red-600 hover:bg-red-700 text-white">
               {saving ? 'Salvando...' : 'Criar OC'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!pagando} onOpenChange={() => { if (!salvandoPgto) setPagando(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <DollarSign className="w-5 h-5 text-blue-600" />Registrar pagamento
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-3 py-1">
+            <div className="bg-gray-50 border rounded-lg p-3 text-sm">
+              <p className="font-semibold text-gray-900">{pagando?.order_number}</p>
+              <p className="text-gray-600">{formatCurrency(pagando?.total || 0)}</p>
+            </div>
+
+            <div>
+              <Label className="text-xs">Data do pagamento</Label>
+              <Input className="mt-1" type="date" value={dataPgto}
+                onChange={e => setDataPgto(e.target.value)} />
+              <p className="text-xs text-gray-500 mt-1">
+                O custo entra no caixa nesta data. Se você está lançando um pagamento
+                antigo, corrija a data para o mês fechar certo.
+              </p>
+            </div>
+
+            <div>
+              <Label className="text-xs">Forma de pagamento</Label>
+              <Select value={formaPgto} onValueChange={setFormaPgto}>
+                <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pix">PIX</SelectItem>
+                  <SelectItem value="dinheiro">Dinheiro</SelectItem>
+                  <SelectItem value="boleto">Boleto</SelectItem>
+                  <SelectItem value="transferencia">Transferência</SelectItem>
+                  <SelectItem value="cartao">Cartão</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" disabled={salvandoPgto}
+              onClick={() => setPagando(null)}>Cancelar</Button>
+            <Button className="bg-blue-600 hover:bg-blue-700 text-white"
+              disabled={salvandoPgto} onClick={confirmarPagamento}>
+              {salvandoPgto ? 'Registrando...' : 'Registrar pagamento'}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Search, Package, Trash2, ShoppingCart, CheckCircle, Plus, Minus, CreditCard, PlusCircle, X } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import { dividirPagamento, lancamentosDaVenda } from '@/lib/caixa';
 import { pendenciasCrediario } from '@/lib/crm';
 import StatusCrediario from '@/components/StatusCrediario';
 
@@ -129,7 +130,12 @@ export default function PDV() {
   }, [total]);
 
   const hasCrediario = payments.some(p => p.method === 'crediario');
-  const remainingForCredit = total - (parseFloat(downPayment) || 0);
+  // Desconta tudo o que já entrou (entrada e outros meios na mesma
+  // venda), não só a entrada: financiar dinheiro que já está no caixa
+  // criaria dívida que o cliente não tem.
+  const { financiado: remainingForCredit } = dividirPagamento({
+    total, pagamentos: payments, entrada: downPayment,
+  });
   const installmentAmount = installments > 0 ? (remainingForCredit * (1 + interestRate / 100)) / installments : 0;
 
   const handleCheckout = async () => {
@@ -206,20 +212,21 @@ export default function PDV() {
         }
       }
 
-      // Accounting: revenue net of fees
-      await base44.entities.AccountingEntry.create({
-        company_id: company.id, date: new Date().toISOString().split('T')[0],
-        type: 'credit', category: 'Vendas PDV', description: 'Venda PDV',
-        amount: total, reference_id: sale.id, reference_type: 'sale',
+      // Caixa: só o que ENTROU agora. O valor financiado no crediário
+      // vira dívida do cliente e entra parcela a parcela — lançar o total
+      // aqui somava a mesma venda duas vezes no faturamento.
+      const { lancamentos } = lancamentosDaVenda({
+        total,
+        pagamentos: payments,
+        entrada: downPayment,
+        taxas: totalFees,
+        categoria: 'Vendas PDV',
+        descricao: 'Venda PDV',
+        data: new Date().toISOString().split('T')[0],
+        saleId: sale.id,
+        companyId: company.id,
       });
-
-      if (totalFees > 0) {
-        await base44.entities.AccountingEntry.create({
-          company_id: company.id, date: new Date().toISOString().split('T')[0],
-          type: 'debit', category: 'Taxas de Cartão', description: 'Taxa maquininha PDV',
-          amount: totalFees, reference_id: sale.id, reference_type: 'sale',
-        });
-      }
+      for (const l of lancamentos) await base44.entities.AccountingEntry.create(l);
 
       setStep('success');
       loadData();

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
+import { dre, inadimplencia } from '@/lib/relatorios';
 import { useCompany } from '@/lib/CompanyContext';
 import { formatCurrency } from '@/lib/formatters';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -45,28 +46,17 @@ export default function RelatoriosGerenciais() {
   const fSales = data.sales.filter(s => pf(s.created_date));
   const fOrders = data.orders.filter(o => pf(o.created_date));
 
-  // DRE simplificado
-  const receita = fSales.reduce((s, x) => s + (x.total || 0), 0);
-  const cogs = fSales.reduce((s, x) => {
-    const items = x.items || [];
-    return s + items.reduce((si, it) => {
-      if (it.type === 'part' || it.part_id) {
-        const p = data.parts.find(p => p.id === (it.part_id || it.id));
-        return si + (p?.cost_price || 0) * (it.quantity || 1);
-      }
-      return si;
-    }, 0);
-  }, 0);
-  const lucroBruto = receita - cogs;
-  const margemBruta = receita > 0 ? (lucroBruto / receita) * 100 : 0;
+  const pecaPorId = Object.fromEntries(data.parts.map(p => [p.id, p]));
+  const tecnicoPorId = Object.fromEntries(data.technicians.map(t => [t.id, t]));
 
-  // Comissões
-  const comissoes = fOrders.reduce((s, o) => {
-    const tech = data.technicians.find(t => t.id === o.mechanic_id);
-    if (!tech?.commission_percent) return s;
-    const svcRev = (o.service_items || []).reduce((si, sv) => si + (sv.total_price || 0), 0);
-    return s + svcRev * (tech.commission_percent / 100);
-  }, 0);
+  // DRE do período. O custo sai do que foi gravado no item da venda, e a
+  // comissão ignora OS cancelada — ver src/lib/relatorios.js.
+  const resultado = dre({ vendas: fSales, ordens: fOrders, pecaPorId, tecnicoPorId });
+  const receita = resultado.receita;
+  const cogs = resultado.cmv;
+  const lucroBruto = resultado.lucroBruto;
+  const margemBruta = resultado.margemBruta;
+  const comissoes = resultado.comissoes;
 
   // Ranking clientes
   const byCustomer = {};
@@ -87,9 +77,13 @@ export default function RelatoriosGerenciais() {
     .sort((a, b) => b.total - a.total);
 
   // Inadimplência
-  const totalCrediario = data.credits.reduce((s, c) => s + (c.total_amount || 0), 0);
-  const inadimplente = data.credits.filter(c => c.status === 'vencido').reduce((s, c) => s + (c.remaining_amount || 0), 0);
-  const taxaInadimplencia = totalCrediario > 0 ? (inadimplente / totalCrediario) * 100 : 0;
+  // O vencimento sai da DATA. O status 'vencido' só existe em memória nas
+  // telas de Crediário e Contas a Pagar, nunca é gravado — filtrar por ele
+  // aqui dava SEMPRE zero, com qualquer carteira atrasada.
+  const carteira = inadimplencia(data.credits);
+  const totalCrediario = carteira.aReceber;
+  const inadimplente = carteira.vencido;
+  const taxaInadimplencia = carteira.taxa;
 
   // Curva ABC peças
   const partSales = {};
@@ -148,7 +142,20 @@ export default function RelatoriosGerenciais() {
             <div className="flex justify-between py-1.5 border-b"><span className="text-sm text-gray-600">Receita Bruta</span><span className="font-semibold">{formatCurrency(receita)}</span></div>
             <div className="flex justify-between py-1.5 border-b"><span className="text-sm text-gray-600">(-) CMV</span><span className="text-red-600">- {formatCurrency(cogs)}</span></div>
             <div className="flex justify-between py-1.5 border-b bg-green-50"><span className="text-sm font-medium">Lucro Bruto</span><span className="font-bold text-green-700">{formatCurrency(lucroBruto)}</span></div>
-            <div className="flex justify-between py-1.5 border-b"><span className="text-sm text-gray-600">Margem Bruta</span><span className="font-semibold text-blue-600">{margemBruta.toFixed(1)}%</span></div>
+            <div className="flex justify-between py-1.5 border-b">
+              <span className="text-sm text-gray-600">
+                Margem Bruta
+                {resultado.cmvEstimado && <span className="text-amber-600"> *</span>}
+              </span>
+              <span className="font-semibold text-blue-600">{margemBruta.toFixed(1)}%</span>
+            </div>
+            {resultado.cmvEstimado && (
+              <p className="text-xs text-amber-700 pt-1">
+                * Parte das vendas não guardou o custo da peça no momento da venda, então
+                esse trecho do CMV usa o custo atual do cadastro — a margem é aproximada.
+                Vendas novas já gravam o custo e ficam exatas.
+              </p>
+            )}
             <div className="flex justify-between py-1.5 border-b"><span className="text-sm text-gray-600">(-) Comissões</span><span className="text-red-600">- {formatCurrency(comissoes)}</span></div>
             <div className="flex justify-between py-1.5 bg-blue-50"><span className="text-sm font-bold">Lucro Operacional</span><span className="font-bold text-blue-700">{formatCurrency(lucroBruto - comissoes)}</span></div>
           </div>

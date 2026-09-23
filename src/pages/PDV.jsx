@@ -197,7 +197,9 @@ export default function PDV() {
           await base44.entities.Part.update(item.part_id, { stock_quantity: newStock });
           await base44.entities.StockMovement.create({
             company_id: company.id, part_id: item.part_id, type: 'saida',
-            quantity: item.quantity, unit_cost: item.unit_price,
+            // unit_cost é o CUSTO, não o preço de venda (o item já carrega
+            // cost_price desde que foi posto no carrinho).
+            quantity: item.quantity, unit_cost: Number(item.cost_price) || Number(part.cost_price) || 0,
             reason: 'PDV', reference_id: sale.id, reference_type: 'sale',
             previous_stock: part.stock_quantity, new_stock: newStock,
           });

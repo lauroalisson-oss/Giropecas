@@ -24,6 +24,19 @@ export function emAberto(titulo) {
 
 export const estaQuitado = (titulo) => centavos(emAberto(titulo)) <= FOLGA;
 
+// Título vencido: sai da DATA, não do status gravado.
+//
+// O status 'vencido' é calculado em memória pelas telas de Crediário e
+// Contas a Pagar e NUNCA é gravado no banco. Quem lê o status direto do
+// banco — como o relatório gerencial fazia — encontra sempre 'a_vencer'
+// e conclui que não há inadimplência nenhuma.
+export function estaVencido(titulo, hoje = new Date().toISOString().split('T')[0]) {
+  if (!titulo?.due_date) return false;
+  if (titulo.status === 'cancelado') return false;
+  if (estaQuitado(titulo)) return false;
+  return String(titulo.due_date) < hoje;
+}
+
 /**
  * Confere um recebimento antes de gravar.
  *

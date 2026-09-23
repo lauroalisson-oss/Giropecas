@@ -105,13 +105,30 @@ export default function PagamentoModal({ order, customer, onClose, onSuccess }) 
     try {
       const primaryMethod = payments.length === 1 ? payments[0].method : 'misto';
 
+      // Lê as peças ANTES de criar a venda: o custo precisa ser gravado
+      // no item, e a baixa de estoque usa a mesma leitura.
+      const ids = [...new Set((order.parts_items || []).map(i => i.part_id).filter(Boolean))];
+      const pecas = {};
+      for (const id of ids) {
+        const p = await base44.entities.Part.get(id).catch(() => null);
+        if (p) pecas[id] = p;
+      }
+
       const sale = await base44.entities.Sale.create({
         company_id: company.id,
         customer_id: order.customer_id,
         work_order_id: order.id,
         type: 'os',
         items: [
-          ...(order.parts_items || []).map(i => ({ ...i, type: 'part' })),
+          // O custo da peça é gravado NO ITEM, congelado no momento da
+          // venda. O cadastro guarda o último custo de compra e muda a
+          // cada entrada — usá-lo depois faria a margem deste mês mudar
+          // sozinha quando chegasse a próxima compra.
+          ...(order.parts_items || []).map(i => ({
+            ...i,
+            type: 'part',
+            cost_price: i.cost_price ?? (Number(pecas[i.part_id]?.cost_price) || 0),
+          })),
           ...(order.service_items || []).map(i => ({ ...i, type: 'service' })),
         ],
         subtotal: (order.parts_total || 0) + (order.services_total || 0),
@@ -131,7 +148,8 @@ export default function PagamentoModal({ order, customer, onClose, onSuccess }) 
       if (order.parts_items?.length > 0) {
         for (const item of order.parts_items) {
           if (item.part_id) {
-            const part = await base44.entities.Part.get(item.part_id);
+            const part = pecas[item.part_id];
+            if (!part) continue;
             const saldo = part.stock_quantity || 0;
             const qtd = item.quantity || 0;
             if (qtd > saldo) {
@@ -141,7 +159,10 @@ export default function PagamentoModal({ order, customer, onClose, onSuccess }) 
             await base44.entities.Part.update(item.part_id, { stock_quantity: newStock });
             await base44.entities.StockMovement.create({
               company_id: company.id, part_id: item.part_id, type: 'saida',
-              quantity: item.quantity, unit_cost: item.unit_price,
+              // unit_cost é o CUSTO da peça, não o preço de venda. Estava
+              // guardando unit_price, e qualquer relatório construído sobre
+              // este campo leria o preço de venda como se fosse custo.
+              quantity: item.quantity, unit_cost: Number(part.cost_price) || 0,
               reason: `OS #${order.order_number}`, reference_id: order.id, reference_type: 'work_order',
               previous_stock: part.stock_quantity, new_stock: newStock,
             });

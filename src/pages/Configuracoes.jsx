@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useCompany } from '@/lib/CompanyContext';
 import { useLicense } from '@/lib/LicenseContext';
+import { limiteDeNotas } from '@/lib/license';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -241,7 +242,7 @@ export default function Configuracoes() {
                       <CheckCircle2 className="w-5 h-5 text-green-600" />
                       <div>
                         <Label className="text-green-800">Plano Fiscal liberado pelo provedor</Label>
-                        <p className="text-xs text-green-700">Emissão de NFC-e/NF-e habilitada • até {Number.isFinite(noteLimit) ? noteLimit : (company?.fiscal_note_limit || 100)} notas/mês</p>
+                        <p className="text-xs text-green-700">Emissão de NFC-e/NF-e habilitada • até {Number.isFinite(noteLimit) ? noteLimit : limiteDeNotas(company?.fiscal_note_limit)} notas/mês</p>
                       </div>
                     </div>
                   </div>

@@ -16,6 +16,7 @@ import {
   podeReceber, podeRegistrarPagamento, dataDePagamento,
   lancamentoPagamentoCompra, situacaoCompra, aPagarEmCompras,
 } from '@/lib/compras';
+import { hoje } from '@/lib/datas';
 
 const STATUS_CONFIG = {
   rascunho: { label: 'Rascunho', color: 'bg-gray-100 text-gray-700' },
@@ -136,7 +137,7 @@ export default function Compras() {
       });
     }
       await base44.entities.Purchase.update(purchase.id, {
-        status: 'recebida', received_date: new Date().toISOString().split('T')[0],
+        status: 'recebida', received_date: hoje(),
       });
       toast({
         title: 'Compra recebida',
@@ -159,7 +160,7 @@ export default function Compras() {
     setPagando(compra);
     // Sugere hoje, mas a oficina pode corrigir: um pagamento lançado com
     // atraso tem de cair no mês em que aconteceu.
-    setDataPgto(new Date().toISOString().split('T')[0]);
+    setDataPgto(hoje());
     setFormaPgto('pix');
   };
 

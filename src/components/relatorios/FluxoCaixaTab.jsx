@@ -9,6 +9,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from 'recharts';
 import { ArrowUpCircle, ArrowDownCircle, DollarSign, Wallet } from 'lucide-react';
+import { hoje } from '@/lib/datas';
 
 export default function FluxoCaixaTab() {
   const { company } = useCompany();
@@ -26,7 +27,7 @@ export default function FluxoCaixaTab() {
   const loadData = async () => {
     if (!company?.id) return;
     setLoading(true);
-    const today = new Date().toISOString().split('T')[0];
+    const today = hoje();
     const [creditTitles, bills, entries, compras] = await Promise.all([
       base44.entities.CreditTitle.filter({ company_id: company.id }, 'due_date', 500),
       base44.entities.Bill.filter({ company_id: company.id }, 'due_date', 500),

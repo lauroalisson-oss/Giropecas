@@ -12,6 +12,7 @@ import {
   resumoComissoes, totaisComissoes, podePagarComissao, lancamentoComissao,
   competenciaDe, REFERENCIA_COMISSAO,
 } from '@/lib/comissoes';
+import { hoje } from '@/lib/datas';
 
 // Os últimos 12 meses, para escolher a competência a pagar.
 function mesesRecentes(n = 12) {
@@ -80,7 +81,7 @@ export default function ComissoesPanel() {
         tecnico: c.tecnico,
         valor: c.pendente,
         competencia,
-        data: new Date().toISOString().split('T')[0],
+        data: hoje(),
         companyId: company.id,
       }));
       toast({ title: `Comissão de ${c.tecnico.name} paga`, description: `Competência ${competencia}` });

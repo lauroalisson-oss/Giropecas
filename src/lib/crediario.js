@@ -5,6 +5,8 @@
 // conferências ficam aqui, separadas da tela, onde dá para olhar caso a
 // caso.
 
+import { hoje as hojeLocal } from './datas';
+
 const dinheiro = (v) => Math.round((Number(v) || 0) * 100) / 100;
 
 // Comparações de dinheiro são feitas em CENTAVOS, como número inteiro.
@@ -30,7 +32,7 @@ export const estaQuitado = (titulo) => centavos(emAberto(titulo)) <= FOLGA;
 // Contas a Pagar e NUNCA é gravado no banco. Quem lê o status direto do
 // banco — como o relatório gerencial fazia — encontra sempre 'a_vencer'
 // e conclui que não há inadimplência nenhuma.
-export function estaVencido(titulo, hoje = new Date().toISOString().split('T')[0]) {
+export function estaVencido(titulo, hoje = hojeLocal()) {
   if (!titulo?.due_date) return false;
   if (titulo.status === 'cancelado') return false;
   if (estaQuitado(titulo)) return false;

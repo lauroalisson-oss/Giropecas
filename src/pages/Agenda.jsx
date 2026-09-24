@@ -13,6 +13,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { ChevronLeft, ChevronRight, Plus, Calendar as CalIcon, Clock, User, Trash2, CheckCircle2, X } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import { hoje, diaLocal } from '@/lib/datas';
 
 const HOURS = Array.from({ length: 12 }, (_, i) => `${String(i + 8).padStart(2, '0')}:00`); // 08:00 - 19:00
 
@@ -33,7 +34,7 @@ export default function Agenda() {
   const [vehicles, setVehicles] = useState([]);
   const [mechanics, setMechanics] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [currentDate, setCurrentDate] = useState(new Date().toISOString().split('T')[0]);
+  const [currentDate, setCurrentDate] = useState(hoje());
   const [viewMode, setViewMode] = useState('day'); // day | mechanic
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -129,16 +130,16 @@ export default function Agenda() {
   const changeDay = (delta) => {
     const d = new Date(currentDate);
     d.setDate(d.getDate() + delta);
-    setCurrentDate(d.toISOString().split('T')[0]);
+    setCurrentDate(diaLocal(d));
   };
 
-  const goToToday = () => setCurrentDate(new Date().toISOString().split('T')[0]);
+  const goToToday = () => setCurrentDate(hoje());
 
   const dateLabel = new Date(currentDate + 'T00:00').toLocaleDateString('pt-BR', {
     weekday: 'long', day: '2-digit', month: 'long', year: 'numeric'
   });
 
-  const isToday = currentDate === new Date().toISOString().split('T')[0];
+  const isToday = currentDate === hoje();
 
   // Group by mechanic
   const byMechanic = mechanics.map(m => ({

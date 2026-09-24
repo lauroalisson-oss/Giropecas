@@ -28,6 +28,8 @@
 // pago. É a mesma separação já feita em Compras: o fato e a data do
 // dinheiro são coisas diferentes.
 
+import { diaLocal, diaDoRegistro } from './datas';
+
 const centavos = (v) => Math.round((Number(v) || 0) * 100);
 const reais = (c) => Math.round(c) / 100;
 
@@ -45,11 +47,15 @@ export function geraComissao(ordem) {
 }
 
 // 'YYYY-MM' — a competência é o mês do serviço, não o do pagamento.
+//
+// Passa por diaDoRegistro, e não por new Date(data).getMonth(): um dia
+// puro como '2026-10-01' vira meia-noite UTC, que no Brasil ainda é 30/09.
+// A versão anterior fazia exatamente isso, e o teste passava porque a
+// máquina de testes rodava em UTC. Toda comissão do dia 1º caía no mês
+// anterior.
 export function competenciaDe(data) {
-  if (!data) return null;
-  const d = new Date(data);
-  if (Number.isNaN(d.getTime())) return null;
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  const dia = data instanceof Date ? diaLocal(data) : diaDoRegistro(data);
+  return dia ? dia.slice(0, 7) : null;
 }
 
 // A data que vale para a OS é a do fechamento; sem ela, a da abertura.

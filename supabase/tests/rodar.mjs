@@ -18,12 +18,34 @@ const suites = readdirSync(AQUI)
 let falharam = [];
 let puladas = [];
 
-for (const suite of suites) {
+// Cada suíte roda nos DOIS fusos que importam:
+//
+//   America/Sao_Paulo — onde a oficina está, e onde o navegador roda;
+//   UTC              — onde roda o servidor (Vercel) e esta máquina.
+//
+// Rodava só no fuso da máquina, que é UTC, e ali "hoje" em UTC e "hoje"
+// na oficina são o mesmo dia. Uma suíte inteira de datas passava verde
+// enquanto no Brasil, a partir das 21h, a venda caía no dia seguinte e o
+// dia 1º do mês caía no mês anterior. Um teste que passa num fuso e falha
+// no outro está dependendo do relógio da máquina — é isso que se procura.
+const FUSOS = ['America/Sao_Paulo', 'UTC'];
+
+function rodar(suite, fuso) {
   // --import resolve o atalho "@/" para as suítes que testam telas.
   const r = spawnSync(process.execPath, ['--import', ALIAS, path.join(AQUI, suite)], {
     encoding: 'utf8',
+    env: { ...process.env, TZ: fuso },
   });
-  const saida = (r.stdout || '') + (r.stderr || '');
+  return { status: r.status, saida: (r.stdout || '') + (r.stderr || '') };
+}
+
+for (const suite of suites) {
+  const porFuso = FUSOS.map(fuso => ({ fuso, ...rodar(suite, fuso) }));
+  // A primeira que falhar é a que se mostra; se nenhuma falhar, a primeira.
+  const pior = porFuso.find(x => x.status !== 0 && x.status !== 2) || porFuso[0];
+  const r = { status: pior.status };
+  const saida = pior.saida;
+  const fusosComFalha = porFuso.filter(x => x.status !== 0 && x.status !== 2).map(x => x.fuso);
   const falhas = (saida.match(/^FAIL:/gm) || []).length;
   const casos = (saida.match(/^ok:/gm) || []).length;
 
@@ -38,7 +60,7 @@ for (const suite of suites) {
     console.log(`✅ ${suite.padEnd(24)} ${casos} casos`);
   } else {
     falharam.push(suite);
-    console.log(`❌ ${suite.padEnd(24)} ${falhas} falha(s)`);
+    console.log(`❌ ${suite.padEnd(24)} ${falhas} falha(s) — no fuso ${fusosComFalha.join(' e ')}`);
     // Mostra só o que falhou; o resto seria ruído.
     for (const linha of saida.split('\n').filter(l => /^FAIL:|Error/.test(l))) {
       console.log(`     ${linha}`);

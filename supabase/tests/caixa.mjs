@@ -8,7 +8,9 @@
 import {
   dividirPagamento, lancamentosDaVenda, taxaDeCartao, totalDeTaxas,
   estornoDaVenda, vendaValida,
+  taxaIncerta, faixaDaTaxa, maquinaPadrao, maquinasCadastradas, BANDEIRAS, MAQUINAS, MAQUINA_GERAL,
 } from '/home/user/Giropecas/src/lib/caixa.js';
+import { readFileSync } from 'node:fs';
 
 let f = 0;
 const ok = (c, m) => { if (!c) { f++; console.log('FAIL:', m); } else console.log('ok:', m); };
@@ -266,6 +268,71 @@ ok(vendaValida({ status: 'pago' }), 'venda paga vale');
 ok(vendaValida({ status: 'pendente' }), 'pendente vale');
 ok(!vendaValida({ status: 'cancelado' }), 'cancelada nao vale');
 ok(!vendaValida(null), 'nula nao vale');
+
+
+{ // escopo proprio
+console.log('--- Taxa: bandeira nao informada ("Qualquer") ---');
+// Ficava com a PRIMEIRA linha da maquininha: a ordem do SELECT decidia se
+// a venda pagava 3% (Visa) ou 5% (Amex).
+const porBandeira = [
+  { brand: 'Visa', machine: MAQUINA_GERAL, debit_rate: 1.5, credit_rates: { 1: 3 } },
+  { brand: 'Amex', machine: MAQUINA_GERAL, debit_rate: 2, credit_rates: { 1: 5 } },
+];
+const semBandeira = { method: 'cartao_credito', brand: '', machine: MAQUINA_GERAL, installments: 1, amount: 100 };
+ok(taxaDeCartao(semBandeira, porBandeira) === 5, 'na duvida, a MAIOR taxa: lucro nunca aparece maior do que foi');
+ok(taxaDeCartao(semBandeira, [...porBandeira].reverse()) === 5, 'e a ordem das linhas nao muda o resultado');
+const inc = taxaIncerta(semBandeira, porBandeira);
+ok(inc && inc.min === 3 && inc.max === 5, 'a tela sabe que a taxa varia entre 3% e 5%');
+ok(taxaIncerta({ ...semBandeira, brand: 'Visa' }, porBandeira) === null, 'com a bandeira, a duvida some');
+ok(taxaDeCartao({ ...semBandeira, brand: 'Visa' }, porBandeira) === 3, 'e a taxa e a da Visa');
+// Todas com a mesma taxa: nao ha o que perguntar.
+const iguais = porBandeira.map(r => ({ ...r, credit_rates: { 1: 4 } }));
+ok(taxaIncerta(semBandeira, iguais) === null, 'taxas iguais: sem aviso, mesmo sem bandeira');
+// Bandeira sem linha propria cai em "Outras".
+const comOutras = [...porBandeira, { brand: 'Outras', machine: MAQUINA_GERAL, credit_rates: { 1: 4 } }];
+ok(taxaDeCartao({ ...semBandeira, brand: 'Elo' }, comOutras) === 4, 'Elo sem linha propria usa "Outras"');
+
+console.log('--- Taxa: maquininha ---');
+// As telas de pagamento nao deixavam escolher a maquininha: tudo saia
+// como "Geral (todas)". Quem cadastrou as taxas como "Stone" ficava com
+// taxa ZERO em toda venda no cartao.
+const soStone = [{ brand: 'Visa', machine: 'Stone', credit_rates: { 1: 3 } }];
+ok(maquinaPadrao(soStone) === 'Stone', 'uma maquininha so: ela ja vem marcada');
+const pagStone = { method: 'cartao_credito', brand: 'Visa', machine: maquinaPadrao(soStone), installments: 1, amount: 100 };
+ok(taxaDeCartao(pagStone, soStone) === 3, 'e a taxa dela e cobrada (antes: zero)');
+// Mesmo sem maquininha informada, a taxa nao some.
+ok(taxaDeCartao({ ...pagStone, machine: '' }, soStone) === 3, 'sem maquininha informada e sem coringa, usa as cadastradas');
+
+const duas = [
+  { brand: 'Visa', machine: 'Stone', credit_rates: { 1: 3 } },
+  { brand: 'Visa', machine: 'Cielo', credit_rates: { 1: 4.2 } },
+];
+ok(maquinaPadrao(duas) === '', 'duas maquininhas sem coringa: nenhuma marcada, a tela pede');
+ok(maquinasCadastradas(duas).join() === 'Stone,Cielo', 'lista as maquininhas cadastradas, sem repetir');
+ok(taxaIncerta({ ...pagStone, machine: '' }, duas)?.max === 4.2, 'sem escolher, avisa a faixa e usa a maior');
+ok(taxaDeCartao({ ...pagStone, machine: 'Cielo' }, duas) === 4.2, 'escolhendo a Cielo, taxa da Cielo');
+ok(maquinaPadrao([...duas, { brand: 'Visa', machine: MAQUINA_GERAL }]) === MAQUINA_GERAL, 'com coringa, a coringa vem marcada');
+ok(maquinaPadrao([]) === '', 'sem cadastro, nada marcado');
+
+console.log('--- A mesma lista de bandeiras em toda tela ---');
+ok(BANDEIRAS.includes('Banricompras') && BANDEIRAS.includes('Outras'), 'as 7 bandeiras do cadastro');
+ok(MAQUINAS[0] === MAQUINA_GERAL, 'a coringa e a primeira maquininha');
+ok(faixaDaTaxa({ method: 'dinheiro', amount: 10 }, porBandeira).max === 0, 'dinheiro nao tem faixa');
+}
+
+
+console.log('--- As telas usam a lista do cadastro ---');
+// As telas de pagamento tinham 5 bandeiras escritas a mao; o cadastro, 7.
+for (const arq of ['src/pages/PDV.jsx', 'src/components/PagamentoModal.jsx', 'src/pages/TaxasCartao.jsx']) {
+  const src = readFileSync(`/home/user/Giropecas/${arq}`, 'utf8');
+  ok(!/\['Visa',\s*'Mastercard'/.test(src), `${arq}: sem lista de bandeiras escrita a mao`);
+}
+for (const arq of ['src/pages/PDV.jsx', 'src/components/PagamentoModal.jsx']) {
+  const src = readFileSync(`/home/user/Giropecas/${arq}`, 'utf8');
+  ok(/BANDEIRAS\.map/.test(src), `${arq}: oferece as bandeiras do cadastro`);
+  ok(/maquinasCadastradas\(cardRates\)/.test(src), `${arq}: deixa escolher a maquininha`);
+  ok(/taxaIncerta\(pay, cardRates\)/.test(src), `${arq}: avisa quando a taxa e incerta`);
+}
 
 console.log(f === 0 ? '\n✅ CAIXA OK' : `\n❌ ${f} falha(s)`);
 process.exit(f ? 1 : 0);

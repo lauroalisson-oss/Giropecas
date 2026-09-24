@@ -8,7 +8,10 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
-import { dividirPagamento, lancamentosDaVenda, taxaDeCartao, totalDeTaxas } from '@/lib/caixa';
+import {
+  dividirPagamento, lancamentosDaVenda, taxaDeCartao, totalDeTaxas,
+  taxaIncerta, maquinasCadastradas, BANDEIRAS,
+} from '@/lib/caixa';
 import { avisoFaltaEmEstoque } from '@/lib/estoque';
 import { CreditCard, DollarSign, PlusCircle, X } from 'lucide-react';
 import { hoje, somarMeses } from '@/lib/datas';
@@ -24,7 +27,7 @@ const ALL_METHODS = [
 function newPayment(amount = 0) {
   // `machine` igual ao PDV: as duas telas passam a mesma forma de
   // pagamento para a mesma função de taxa.
-  return { method: 'dinheiro', amount, installments: 1, brand: '', machine: 'Geral (todas)', absorbFee: false };
+  return { method: 'dinheiro', amount, installments: 1, brand: '', machine: '', absorbFee: false };
 }
 
 export default function PagamentoModal({ order, customer, onClose, onSuccess }) {
@@ -271,6 +274,22 @@ export default function PagamentoModal({ order, customer, onClose, onSuccess }) 
                   {/* Card options */}
                   {(pay.method === 'cartao_credito' || pay.method === 'cartao_debito') && (
                     <div className="space-y-2">
+                      {/* Maquininha: só aparece quando há mais de uma cadastrada.
+                          Antes não havia como escolher — tudo saía como "Geral". */}
+                      {maquinasCadastradas(cardRates).length > 1 && (
+                        <div>
+                          <Label className="text-xs">Maquininha</Label>
+                          <Select value={pay.machine || 'none'} onValueChange={v => updatePayment(idx, 'machine', v === 'none' ? '' : v)}>
+                            <SelectTrigger className="mt-0.5 h-8 text-xs"><SelectValue placeholder="Escolha" /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">Não sei / escolher depois</SelectItem>
+                              {maquinasCadastradas(cardRates).map(m => (
+                                <SelectItem key={m} value={m}>{m}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
                       <div className="grid grid-cols-2 gap-2">
                         <div>
                           <Label className="text-xs">Bandeira</Label>
@@ -278,7 +297,7 @@ export default function PagamentoModal({ order, customer, onClose, onSuccess }) 
                             <SelectTrigger className="mt-0.5 h-8 text-xs"><SelectValue placeholder="Qualquer" /></SelectTrigger>
                             <SelectContent>
                               <SelectItem value="none">Qualquer</SelectItem>
-                              {['Visa', 'Mastercard', 'Elo', 'Amex', 'Hipercard'].map(b => (
+                              {BANDEIRAS.map(b => (
                                 <SelectItem key={b} value={b}>{b}</SelectItem>
                               ))}
                             </SelectContent>
@@ -325,6 +344,13 @@ export default function PagamentoModal({ order, customer, onClose, onSuccess }) 
                       {getCardFee(pay) > 0 && (
                         <p className="text-xs text-orange-600 bg-orange-50 rounded px-2 py-1">
                           Taxa da maquininha: -{formatCurrency(getCardFee(pay))} — sai do caixa nas duas opções
+                        </p>
+                      )}
+                      {taxaIncerta(pay, cardRates) && (
+                        <p className="text-xs text-amber-700 bg-amber-50 rounded px-2 py-1">
+                          A taxa varia entre {taxaIncerta(pay, cardRates).min}% e {taxaIncerta(pay, cardRates).max}% —
+                          escolha a bandeira{maquinasCadastradas(cardRates).length > 1 ? ' e a maquininha' : ''}.
+                          Até lá o sistema usa a maior.
                         </p>
                       )}
                       {getCardFee(pay) === 0 && (pay.method === 'cartao_credito' || pay.method === 'cartao_debito') && (

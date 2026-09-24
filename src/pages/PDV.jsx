@@ -10,7 +10,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Search, Package, Trash2, ShoppingCart, CheckCircle, Plus, Minus, CreditCard, PlusCircle, X } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
-import { dividirPagamento, lancamentosDaVenda, taxaDeCartao, totalDeTaxas } from '@/lib/caixa';
+import {
+  dividirPagamento, lancamentosDaVenda, taxaDeCartao, totalDeTaxas,
+  taxaIncerta, maquinasCadastradas, BANDEIRAS,
+} from '@/lib/caixa';
 import { faltaEmEstoque, avisoFaltaEmEstoque } from '@/lib/estoque';
 import { pendenciasCrediario } from '@/lib/crm';
 import StatusCrediario from '@/components/StatusCrediario';
@@ -25,7 +28,7 @@ const ALL_METHODS = [
 ];
 
 function newPayment() {
-  return { method: 'dinheiro', amount: 0, installments: 1, brand: '', machine: 'Geral (todas)' };
+  return { method: 'dinheiro', amount: 0, installments: 1, brand: '', machine: '' };
 }
 
 export default function PDV() {
@@ -424,6 +427,19 @@ export default function PDV() {
                           value={pay.amount} onChange={e => updatePayment(idx, 'amount', parseFloat(e.target.value) || 0)} />
                       </div>
 
+                      {/* Maquininha: só com mais de uma cadastrada. Ver PagamentoModal. */}
+                      {(pay.method === 'cartao_credito' || pay.method === 'cartao_debito') && maquinasCadastradas(cardRates).length > 1 && (
+                        <div>
+                          <Label className="text-xs">Maquininha</Label>
+                          <Select value={pay.machine || 'none'} onValueChange={v => updatePayment(idx, 'machine', v === 'none' ? '' : v)}>
+                            <SelectTrigger className="mt-0.5 h-8 text-xs"><SelectValue placeholder="Escolha" /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">Não sei / escolher depois</SelectItem>
+                              {maquinasCadastradas(cardRates).map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
                       {(pay.method === 'cartao_credito' || pay.method === 'cartao_debito') && (
                         <div className="grid grid-cols-2 gap-2">
                           <div>
@@ -432,7 +448,7 @@ export default function PDV() {
                               <SelectTrigger className="mt-0.5 h-8 text-xs"><SelectValue placeholder="Bandeira" /></SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="none">Qualquer</SelectItem>
-                                {['Visa', 'Mastercard', 'Elo', 'Amex', 'Hipercard'].map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}
+                                {BANDEIRAS.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}
                               </SelectContent>
                             </Select>
                           </div>
@@ -453,6 +469,17 @@ export default function PDV() {
                       {/* Fee preview */}
                       {(pay.method === 'cartao_credito' || pay.method === 'cartao_debito') && getCardFee(pay) > 0 && (
                         <p className="text-xs text-orange-600">Taxa: -{formatCurrency(getCardFee(pay))}</p>
+                      )}
+                      {taxaIncerta(pay, cardRates) && (
+                        <p className="text-xs text-amber-700">
+                          A taxa varia entre {taxaIncerta(pay, cardRates).min}% e {taxaIncerta(pay, cardRates).max}% —
+                          escolha a bandeira{maquinasCadastradas(cardRates).length > 1 ? ' e a maquininha' : ''}. Até lá o sistema usa a maior.
+                        </p>
+                      )}
+                      {/* Antes o PDV não avisava nada quando a venda no cartão
+                          ficava sem taxa — o lucro aparecia maior, em silêncio. */}
+                      {(pay.method === 'cartao_credito' || pay.method === 'cartao_debito') && getCardFee(pay) === 0 && (
+                        <p className="text-xs text-gray-500">Sem taxa cadastrada — cadastre em Configurações → Taxas de Cartão</p>
                       )}
 
                       {/* Crediario extra */}

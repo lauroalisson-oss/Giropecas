@@ -150,3 +150,97 @@ export function dre({ vendas, ordens, pecaPorId, tecnicoPorId }) {
     lucroOperacional: reais(operacionalC),
   };
 }
+
+// Os baldes do painel "vendas por forma de pagamento".
+const BALDE = {
+  dinheiro: 'dinheiro', pix: 'pix', cartao_debito: 'debito',
+  cartao_credito: 'credito', crediario: 'crediario',
+};
+
+/**
+ * Como o valor de UMA venda se divide entre as formas de pagamento.
+ *
+ * O painel jogava a venda inteira no método principal, e o que não
+ * reconhecia — venda 'misto', cartão + dinheiro — ia para "dinheiro" como
+ * fallback. Uma venda de R$1.000 com R$600 no crédito aparecia como R$1.000
+ * em espécie, e o lojista procurava na gaveta um dinheiro que foi para a
+ * maquininha.
+ *
+ * Troco não é venda: o dinheiro entregue a mais é limitado ao que faltava.
+ * No crediário, a entrada vai para dinheiro e o financiado para crediário.
+ * O que não dá para atribuir fica em "outros" — à vista, não escondido.
+ */
+export function vendaPorMeio(venda) {
+  const baldes = { dinheiro: 0, debito: 0, credito: 0, pix: 0, crediario: 0, outros: 0 };
+  const totalC = centavos(venda?.total);
+  if (totalC <= 0) return Object.fromEntries(Object.keys(baldes).map(k => [k, 0]));
+
+  const det = venda.payment_details || {};
+  const pags = (det.payments || []).filter(Boolean);
+  let restante = totalC;
+  const por = (balde, c) => { const v = Math.max(0, Math.min(c, restante)); baldes[balde] += v; restante -= v; };
+
+  if (!pags.length) {
+    por(BALDE[venda.payment_method] || 'outros', totalC);
+  } else {
+    const temCred = pags.some(p => p.method === 'crediario');
+    const naoCred = pags.filter(p => p.method !== 'crediario');
+    // Primeiro o que tem valor exato; dinheiro por último, porque é ele que
+    // leva o troco.
+    for (const p of naoCred.filter(p => p.method !== 'dinheiro')) por(BALDE[p.method] || 'outros', centavos(p.amount));
+    for (const p of naoCred.filter(p => p.method === 'dinheiro')) por('dinheiro', centavos(p.amount));
+    if (temCred) {
+      por('dinheiro', centavos(det.downPayment));
+      por('crediario', restante);
+    }
+    por('outros', restante);
+  }
+  return Object.fromEntries(Object.entries(baldes).map(([k, c]) => [k, reais(c)]));
+}
+
+/**
+ * O resultado de um conjunto de vendas — o "lucro de hoje" do painel.
+ *
+ * O painel financeiro tinha contas próprias, e cada uma divergia do DRE:
+ *
+ *   - custo das peças pelo CADASTRO ATUAL antes do custo gravado no item
+ *     (`part.cost_price ?? item.cost_price`): a margem de ontem mudava
+ *     quando chegava compra nova — o mesmo bug já corrigido no DRE;
+ *   - comissão por UMA taxa única digitada no próprio painel e guardada no
+ *     navegador, em vez do percentual de cada mecânico: o celular do dono e
+ *     o computador do balcão mostravam lucros diferentes para o mesmo dia;
+ *   - somas em ponto flutuante.
+ *
+ * Agora custo e comissão saem das mesmas funções do DRE.
+ *
+ * @param {Array} vendas        vendas do período (as canceladas são ignoradas)
+ * @param {Array} ordens        OS — as ligadas a estas vendas geram comissão
+ */
+export function resumoDeVendas({ vendas = [], ordens = [], pecaPorId = {}, tecnicoPorId = {} }) {
+  const validas = (vendas || []).filter(vendaValida);
+  const faturamentoC = validas.reduce((s, v) => s + centavos(v.total), 0);
+  const taxasC = validas.reduce((s, v) => s + centavos(v.payment_details?.totalFees), 0);
+  const cmv = custoDasVendas(validas, pecaPorId);
+
+  const ids = new Set(validas.map(v => v.work_order_id).filter(Boolean));
+  const com = comissoes((ordens || []).filter(o => o && ids.has(o.id)), tecnicoPorId);
+
+  const porMeio = { dinheiro: 0, debito: 0, credito: 0, pix: 0, crediario: 0, outros: 0 };
+  for (const v of validas) {
+    for (const [k, val] of Object.entries(vendaPorMeio(v))) porMeio[k] = reais(centavos(porMeio[k]) + centavos(val));
+  }
+
+  // Lucro pode ser negativo, e aparece negativo. O gráfico tinha
+  // Math.max(0, lucro): dia de prejuízo virava dia "zerado".
+  const lucroC = faturamentoC - taxasC - centavos(cmv.total) - centavos(com.total);
+
+  return {
+    faturamento: reais(faturamentoC),
+    taxas: reais(taxasC),
+    cmv: cmv.total,
+    cmvEstimado: cmv.estimado,
+    comissoes: com.total,
+    lucro: reais(lucroC),
+    porMeio,
+  };
+}

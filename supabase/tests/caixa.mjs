@@ -5,7 +5,9 @@
 // separação, a mesma venda era somada duas vezes ao faturamento — uma
 // pelo total no fechamento, outra parcela a parcela.
 
-import { dividirPagamento, lancamentosDaVenda } from '/home/user/Giropecas/src/lib/caixa.js';
+import {
+  dividirPagamento, lancamentosDaVenda, taxaDeCartao, totalDeTaxas,
+} from '/home/user/Giropecas/src/lib/caixa.js';
 
 let f = 0;
 const ok = (c, m) => { if (!c) { f++; console.log('FAIL:', m); } else console.log('ok:', m); };
@@ -111,6 +113,79 @@ const noFechamento = venda.lancamentos
 const parcelasPagas = 4 * 200; // lançadas uma a uma pela tela de Crediário
 ok(noFechamento + parcelasPagas === 1000,
   `caixa total = 1000 (deu ${noFechamento + parcelasPagas}) — antes dava 2000`);
+
+console.log('--- Taxa de cartao: a soma tem de ser SOMA ---');
+// O modal de faturar OS fazia `payments.reduce((s, p) => getCardFee(p), 0)`
+// — sem usar o acumulador. Devolvia a taxa do ULTIMO pagamento.
+const tabela = [
+  { brand: 'Visa', machine: 'Stone', debit_rate: 1.5, credit_rates: { 1: 3, 3: 5 } },
+  { brand: 'Visa', machine: 'Cielo', debit_rate: 2.0, credit_rates: { 1: 4.2, 3: 6 } },
+  { brand: 'Outras', machine: 'Geral (todas)', debit_rate: 2.5, credit_rates: { 1: 5 } },
+];
+const noCartao = (extra) => ({
+  method: 'cartao_credito', brand: 'Visa', machine: 'Stone',
+  installments: 1, amount: 600, ...extra,
+});
+
+ok(taxaDeCartao(noCartao()) === 0, 'sem tabela cadastrada, taxa zero');
+ok(taxaDeCartao(noCartao(), tabela) === 18, '3% de 600 = 18');
+
+// O caso que sumia: cartao + dinheiro, com o dinheiro por ULTIMO.
+const misto = [noCartao({ amount: 600 }), { method: 'dinheiro', amount: 400 }];
+ok(totalDeTaxas(misto, tabela) === 18,
+  `cartao + dinheiro cobra a taxa do cartao (deu ${totalDeTaxas(misto, tabela)}, antes dava 0)`);
+
+const doisCartoes = [noCartao({ amount: 600 }), noCartao({ amount: 400, installments: 3 })];
+ok(totalDeTaxas(doisCartoes, tabela) === 38,
+  `dois cartoes somam: 18 + 20 (deu ${totalDeTaxas(doisCartoes, tabela)}, antes dava 20)`);
+
+ok(totalDeTaxas([], tabela) === 0, 'venda sem pagamento');
+ok(totalDeTaxas(null, tabela) === 0, 'lista nula');
+ok(totalDeTaxas([null, noCartao()], tabela) === 18, 'pagamento nulo no meio');
+
+console.log('--- Taxa de cartao: qual LINHA do cadastro ---');
+// A copia do modal ignorava a maquininha e caia em cardRates[0] — a
+// primeira linha que o banco devolvesse. Com Stone a 3% e Cielo a 4,2%,
+// a mesma venda custava taxas diferentes dependendo da ordem do SELECT.
+ok(taxaDeCartao(noCartao({ machine: 'Cielo' }), tabela) === 25.2,
+  `usa a linha da Cielo: 4,2% de 600 (deu ${taxaDeCartao(noCartao({ machine: 'Cielo' }), tabela)})`);
+ok(taxaDeCartao(noCartao({ machine: 'Stone' }), tabela) === 18, 'usa a linha da Stone: 3%');
+ok(taxaDeCartao(noCartao({ machine: 'Rede' }), tabela) === 30,
+  'maquininha sem linha propria cai na coringa Geral (5%)');
+ok(taxaDeCartao(noCartao({ brand: 'Elo', machine: 'Rede' }), tabela) === 30,
+  'bandeira sem linha propria tambem cai na coringa');
+
+// Sem linha nenhuma que sirva, a taxa e zero — e o lojista percebe que
+// falta cadastrar. Chutar uma linha qualquer erraria calado.
+ok(taxaDeCartao(noCartao({ machine: 'Rede' }), [tabela[0]]) === 0,
+  'sem coringa e sem a maquininha, taxa zero em vez de linha errada');
+
+console.log('--- Taxa de cartao: debito, parcelas e bordas ---');
+ok(taxaDeCartao(noCartao({ method: 'cartao_debito', amount: 1000 }), tabela) === 15,
+  'debito usa debit_rate: 1,5% de 1000');
+ok(taxaDeCartao(noCartao({ installments: 3, amount: 1000 }), tabela) === 50, '3x usa a linha de 3 parcelas');
+ok(taxaDeCartao(noCartao({ installments: 7 }), tabela) === 0, 'parcela sem taxa cadastrada nao inventa');
+ok(taxaDeCartao(noCartao({ installments: null }), tabela) === 18, 'sem parcelas informadas vale 1x');
+ok(taxaDeCartao({ method: 'dinheiro', amount: 600 }, tabela) === 0, 'dinheiro nao tem taxa');
+ok(taxaDeCartao({ method: 'pix', amount: 600 }, tabela) === 0, 'pix nao tem taxa');
+ok(taxaDeCartao({ method: 'crediario', amount: 600 }, tabela) === 0, 'crediario nao tem taxa');
+ok(taxaDeCartao(null, tabela) === 0, 'pagamento nulo');
+ok(taxaDeCartao(noCartao({ amount: 0 }), tabela) === 0, 'valor zero');
+
+// Centavos: 3% de 33,33 = 0,9999 -> 1,00. Sem arredondar em centavos, o
+// debito sairia com casas que o caixa nao sabe representar.
+ok(taxaDeCartao(noCartao({ amount: 33.33 }), tabela) === 1,
+  `centavos ficam exatos (deu ${taxaDeCartao(noCartao({ amount: 33.33 }), tabela)})`);
+
+console.log('--- A taxa chega ao caixa como despesa ---');
+const vendaComTaxa = lancamentosDaVenda({
+  total: 1000, pagamentos: misto, taxas: totalDeTaxas(misto, tabela),
+  categoria: 'Vendas OS', descricao: 'OS #7', data: '2026-09-24', saleId: 'v9', companyId: 'c1',
+});
+ok(vendaComTaxa.lancamentos.length === 2, 'um credito da venda e um debito da taxa');
+const debitoTaxa = vendaComTaxa.lancamentos.find(l => l.type === 'debit');
+ok(debitoTaxa && debitoTaxa.amount === 18, 'o debito e a taxa somada');
+ok(debitoTaxa.category === 'Taxas de Cartão', 'lancada na categoria propria');
 
 console.log(f === 0 ? '\n✅ CAIXA OK' : `\n❌ ${f} falha(s)`);
 process.exit(f ? 1 : 0);

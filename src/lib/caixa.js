@@ -11,6 +11,70 @@ const centavos = (v) => Math.round((Number(v) || 0) * 100);
 const reais = (c) => Math.round(c) / 100;
 
 export const CREDIARIO = 'crediario';
+export const METODOS_CARTAO = ['cartao_credito', 'cartao_debito'];
+
+// Linha coringa do cadastro de taxas: vale para qualquer maquininha.
+const MAQUINA_GERAL = 'Geral (todas)';
+const BANDEIRA_GERAL = 'Outras';
+
+/**
+ * A taxa que a maquininha desconta de UM pagamento.
+ *
+ * A escolha da linha é explícita e vai do mais específico ao mais geral.
+ * Nunca cai numa linha qualquer: se nada casa, a taxa é zero e o lojista
+ * vê que falta cadastrar — melhor do que cobrar 4,2% da Stone numa venda
+ * feita na Cielo porque aquela linha voltou primeiro do banco.
+ *
+ * @param {object} pagamento  { method, brand, machine, installments, amount }
+ * @param {Array}  taxas      linhas de card_rates
+ */
+export function taxaDeCartao(pagamento, taxas = []) {
+  const p = pagamento || {};
+  if (!METODOS_CARTAO.includes(p.method)) return 0;
+
+  const lista = (taxas || []).filter(Boolean);
+  const casaMaquina = r => r.machine === p.machine || r.machine === MAQUINA_GERAL;
+  const casaBandeira = r => r.brand === p.brand || r.brand === BANDEIRA_GERAL;
+
+  const linha =
+    // 1. bandeira e maquininha exatas
+    lista.find(r => r.brand === p.brand && r.machine === p.machine)
+    // 2. a maquininha certa, bandeira coringa (ou pagamento sem bandeira)
+    || lista.find(r => r.machine === p.machine && (casaBandeira(r) || !p.brand))
+    // 3. a bandeira certa na linha coringa de maquininha
+    || lista.find(r => r.machine === MAQUINA_GERAL && casaBandeira(r))
+    // 4. qualquer linha coringa de maquininha
+    || lista.find(casaMaquina);
+
+  if (!linha) return 0;
+
+  const percentual = p.method === 'cartao_debito'
+    ? Number(linha.debit_rate) || 0
+    : Number(linha.credit_rates?.[String(p.installments || 1)]) || 0;
+
+  if (percentual <= 0) return 0;
+  return reais(Math.round(centavos(p.amount) * percentual) / 100);
+}
+
+/**
+ * A soma das taxas de todos os pagamentos da venda.
+ *
+ * Existe porque as duas telas que cobram cartão — o PDV e o modal de
+ * faturar OS — tinham cada uma a sua cópia desta conta, e as cópias
+ * divergiram. A do modal era:
+ *
+ *     payments.reduce((s, p) => getCardFee(p), 0)
+ *
+ * O acumulador `s` não é usado: o resultado era a taxa do ÚLTIMO
+ * pagamento, não a soma. Numa OS paga com cartão + dinheiro, a taxa do
+ * cartão sumia inteira — o caixa ficava com o valor cheio e o lucro
+ * aparecia maior do que foi.
+ */
+export function totalDeTaxas(pagamentos = [], taxas = []) {
+  const totalC = (pagamentos || [])
+    .reduce((s, p) => s + centavos(taxaDeCartao(p, taxas)), 0);
+  return reais(totalC);
+}
 
 /**
  * Separa o que entrou agora do que ficou financiado.

@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Search, Package, Trash2, ShoppingCart, CheckCircle, Plus, Minus, CreditCard, PlusCircle, X } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
-import { dividirPagamento, lancamentosDaVenda } from '@/lib/caixa';
+import { dividirPagamento, lancamentosDaVenda, taxaDeCartao, totalDeTaxas } from '@/lib/caixa';
 import { faltaEmEstoque, avisoFaltaEmEstoque } from '@/lib/estoque';
 import { pendenciasCrediario } from '@/lib/crm';
 import StatusCrediario from '@/components/StatusCrediario';
@@ -99,21 +99,12 @@ export default function PDV() {
   const subtotal = cart.reduce((s, i) => s + i.total_price, 0);
   const total = subtotal - (parseFloat(discount) || 0);
 
-  // Card fee logic
-  const getCardFee = (payment) => {
-    if (payment.method !== 'cartao_credito' && payment.method !== 'cartao_debito') return 0;
-    const rate = cardRates.find(r =>
-      (r.brand === payment.brand || !payment.brand || r.brand === 'Outras') &&
-      (r.machine === payment.machine || r.machine === 'Geral (todas)')
-    ) || cardRates.find(r => r.machine === 'Geral (todas)');
-    if (!rate) return 0;
-    if (payment.method === 'cartao_debito') return (payment.amount * (rate.debit_rate || 0)) / 100;
-    const creditRate = rate.credit_rates?.[String(payment.installments)] || 0;
-    return (payment.amount * creditRate) / 100;
-  };
+  // A conta da taxa mora em lib/caixa.js, junto com a do modal de faturar
+  // OS. Havia uma cópia em cada tela, e elas divergiram.
+  const getCardFee = (payment) => taxaDeCartao(payment, cardRates);
 
   const totalPaid = payments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
-  const totalFees = payments.reduce((s, p) => s + getCardFee(p), 0);
+  const totalFees = totalDeTaxas(payments, cardRates);
   const cashPayments = payments.filter(p => p.method === 'dinheiro');
   const hasCash = cashPayments.length > 0;
   const cashPaid = cashPayments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);

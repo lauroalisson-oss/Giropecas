@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
-import { dividirPagamento, lancamentosDaVenda } from '@/lib/caixa';
+import { dividirPagamento, lancamentosDaVenda, taxaDeCartao, totalDeTaxas } from '@/lib/caixa';
 import { avisoFaltaEmEstoque } from '@/lib/estoque';
 import { CreditCard, DollarSign, PlusCircle, X } from 'lucide-react';
 
@@ -21,7 +21,9 @@ const ALL_METHODS = [
 ];
 
 function newPayment(amount = 0) {
-  return { method: 'dinheiro', amount, installments: 1, brand: '', absorbFee: false };
+  // `machine` igual ao PDV: as duas telas passam a mesma forma de
+  // pagamento para a mesma função de taxa.
+  return { method: 'dinheiro', amount, installments: 1, brand: '', machine: 'Geral (todas)', absorbFee: false };
 }
 
 export default function PagamentoModal({ order, customer, onClose, onSuccess }) {
@@ -45,21 +47,13 @@ export default function PagamentoModal({ order, customer, onClose, onSuccess }) 
 
   const hasCrediario = payments.some(p => p.method === 'crediario');
 
-  const getCardFee = (payment) => {
-    if (payment.method !== 'cartao_credito' && payment.method !== 'cartao_debito') return 0;
-    if (payment.absorbFee) return 0; // empresa absorve, não desconta do lucro do ponto de vista do cliente
-    const rate = cardRates.find(r =>
-      (r.brand === payment.brand || !payment.brand || r.brand === 'Outras') &&
-      (r.machine === 'Geral (todas)')
-    ) || cardRates[0];
-    if (!rate) return 0;
-    if (payment.method === 'cartao_debito') return (payment.amount * (rate.debit_rate || 0)) / 100;
-    const creditRate = rate.credit_rates?.[String(payment.installments)] || 0;
-    return (payment.amount * creditRate) / 100;
-  };
+  // A conta da taxa mora em lib/caixa.js, junto com a do PDV. Aqui havia
+  // uma cópia, e a cópia tinha divergido em três pontos: somava errado,
+  // ignorava a maquininha e zerava a taxa quando a empresa a absorvia.
+  const getCardFee = (payment) => taxaDeCartao(payment, cardRates);
 
   const totalPaid = payments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
-  const totalFees = payments.reduce((s, p) => getCardFee(p), 0);
+  const totalFees = totalDeTaxas(payments, cardRates);
   const hasCash = payments.some(p => p.method === 'dinheiro');
   const change = hasCash ? Math.max(0, totalPaid - total) : 0;
   // O que sobra para financiar é o total menos TUDO que entrou agora —
@@ -301,7 +295,14 @@ export default function PagamentoModal({ order, customer, onClose, onSuccess }) 
                         )}
                       </div>
 
-                      {/* Absorb fee toggle */}
+                      {/* Quem pagou a taxa — anotação, não conta.
+                          A maquininha desconta a taxa do depósito de
+                          qualquer jeito, então o débito no caixa existe
+                          nas duas posições. O que muda é se ela já foi
+                          embutida no preço da OS. Antes, "empresa
+                          absorve" zerava a taxa: a única posição que
+                          prometia lucro menor era justamente a que
+                          deixava o lucro intacto. */}
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => updatePayment(idx, 'absorbFee', !pay.absorbFee)}
@@ -310,19 +311,21 @@ export default function PagamentoModal({ order, customer, onClose, onSuccess }) 
                           <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${pay.absorbFee ? 'translate-x-4' : ''}`} />
                         </button>
                         <span className="text-xs text-gray-600">
-                          {pay.absorbFee ? 'Empresa absorve a taxa (cliente paga valor normal)' : 'Repassar taxa ao cliente'}
+                          {pay.absorbFee
+                            ? 'A oficina absorveu a taxa (não entrou no preço)'
+                            : 'A taxa já está embutida no preço da OS'}
                         </span>
                       </div>
 
                       {/* Fee preview */}
                       {getCardFee(pay) > 0 && (
                         <p className="text-xs text-orange-600 bg-orange-50 rounded px-2 py-1">
-                          Taxa estimada: -{formatCurrency(getCardFee(pay))} (será abatida do lucro)
+                          Taxa da maquininha: -{formatCurrency(getCardFee(pay))} — sai do caixa nas duas opções
                         </p>
                       )}
-                      {pay.absorbFee && (
-                        <p className="text-xs text-blue-600 bg-blue-50 rounded px-2 py-1">
-                          Taxa absorvida pela empresa — lucro líquido menor
+                      {getCardFee(pay) === 0 && (pay.method === 'cartao_credito' || pay.method === 'cartao_debito') && (
+                        <p className="text-xs text-gray-500 bg-gray-50 rounded px-2 py-1">
+                          Sem taxa cadastrada para esta maquininha/bandeira — cadastre em Taxas de Cartão
                         </p>
                       )}
                     </div>

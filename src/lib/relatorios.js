@@ -5,6 +5,7 @@
 // só leva a uma decisão ruim.
 
 import { emAberto, estaVencido, estaQuitado } from './crediario';
+import { geraComissao } from './comissoes';
 
 const centavos = (v) => Math.round((Number(v) || 0) * 100);
 const reais = (c) => Math.round(c) / 100;
@@ -68,7 +69,10 @@ export function comissoes(ordens, tecnicoPorId) {
 
   for (const o of ordens || []) {
     if (!o?.mechanic_id) continue;
-    if (o.status === 'cancelada') continue;
+    // Só serviço concluído gera comissão. Antes bastava não estar
+    // cancelada, o que punha no DRE a comissão de OS ainda na bancada —
+    // e divergia do painel de Técnicos, que já exigia a conclusão.
+    if (!geraComissao(o)) continue;
 
     const tecnico = tecnicoPorId?.[o.mechanic_id];
     const percentual = Number(tecnico?.commission_percent) || 0;

@@ -71,6 +71,15 @@ ok(comissoes([os()], tecnicos).total === 100, '10% de 1000 = 100');
 ok(comissoes([os({ status: 'cancelada' })], tecnicos).total === 0, 'OS cancelada nao gera comissao');
 ok(comissoes([os(), os({ status: 'cancelada' })], tecnicos).total === 100, 'so a valida conta');
 
+// A regra de qual OS gera comissao e UMA SO, em lib/comissoes.js. Aqui
+// bastava nao estar cancelada: uma OS ainda na bancada entrava no DRE
+// como comissao devida, e o painel de Tecnicos, que ja exigia a
+// conclusao, mostrava outro numero para o mesmo mes.
+ok(comissoes([os({ status: 'aberta' })], tecnicos).total === 0, 'OS aberta nao gera comissao');
+ok(comissoes([os({ status: 'em_andamento' })], tecnicos).total === 0, 'OS em andamento nao gera');
+ok(comissoes([os({ status: 'aguardando_peca' })], tecnicos).total === 0, 'OS parada por peca nao gera');
+ok(comissoes([os({ status: 'finalizada' })], tecnicos).total === 100, 'OS finalizada gera');
+
 ok(comissoes([os({ mechanic_id: null })], tecnicos).total === 0, 'OS sem mecanico');
 ok(comissoes([os({ mechanic_id: 'desconhecido' })], tecnicos).total === 0, 'mecanico fora do cadastro');
 ok(comissoes([os()], { m1: { name: 'João' } }).total === 0, 'mecanico sem percentual definido');

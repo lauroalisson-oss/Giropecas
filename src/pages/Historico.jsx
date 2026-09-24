@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Search, Download, ClipboardList, ShoppingCart, Filter, X, Trash2, Edit2, AlertTriangle, Printer, FileText, Receipt, Car } from 'lucide-react';
+import { Search, Download, ClipboardList, ShoppingCart, Filter, X, Trash2, Edit2, AlertTriangle, Printer, FileText, Receipt, Car, Undo2 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useToast } from '@/components/ui/use-toast';
 import { printDocument } from '@/components/PrintReceipt';
@@ -18,6 +18,9 @@ import { revisoesDaOrdem } from '@/lib/crm';
 import { saldoADevolver, devolucaoDeEstoque } from '@/lib/estoque';
 import { resumoCrediario } from '@/lib/crediario';
 import { notaAutorizadaDe, motivoNaoExcluir } from '@/lib/nfse-dados';
+import { planejarCancelamento, executarCancelamento, avisoDeCancelamento } from '@/lib/cancelamento';
+import { VENDA_CANCELADA } from '@/lib/caixa';
+import { hoje } from '@/lib/datas';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import EmitirNotaButton from '@/components/EmitirNotaButton';
 import EmitirNfseButton from '@/components/EmitirNfseButton';
@@ -31,6 +34,7 @@ const STATUS_COLORS = {
   finalizada: 'bg-purple-100 text-purple-700',
   faturada: 'bg-green-100 text-green-700',
   cancelada: 'bg-red-100 text-red-700',
+  cancelado: 'bg-red-100 text-red-700',
   pago: 'bg-green-100 text-green-700',
   pendente: 'bg-yellow-100 text-yellow-700',
 };
@@ -38,7 +42,8 @@ const STATUS_COLORS = {
 const STATUS_LABELS = {
   aberta: 'Aberta', em_andamento: 'Em andamento', aguardando_peca: 'Ag. peça',
   finalizada: 'Finalizada', faturada: 'Faturada', cancelada: 'Cancelada',
-  pago: 'Pago', pendente: 'Pendente',
+  // A venda cancelada é gravada como 'cancelado' (regra do banco).
+  cancelado: 'Cancelada', pago: 'Pago', pendente: 'Pendente',
 };
 
 const PAYMENT_LABELS = {
@@ -83,6 +88,7 @@ export default function Historico() {
   // Delete confirm
   const [confirmDelete, setConfirmDelete] = useState(null); // { type: 'order'|'sale', item }
   const [deleting, setDeleting] = useState(false);
+  const [cancelando, setCancelando] = useState(null);
 
   useEffect(() => {
     if (company?.id) loadData();
@@ -293,6 +299,42 @@ export default function Historico() {
       toast({ title: 'Erro ao excluir OS', description: e.message, variant: 'destructive' });
     } finally {
       setDeleting(false);
+    }
+  };
+
+  // Venda de balcão devolvida pelo cliente: cancela registrando a
+  // devolução do dinheiro no dia de hoje. Excluir (a lixeira) é para venda
+  // lançada por engano — apaga a venda do mês em que ela foi feita.
+  // Mesma lógica do cancelamento de OS: lib/cancelamento.js.
+  const handleCancelSale = async (sale) => {
+    if (cancelando) return;
+    const descricao = `PDV #${sale.sale_number || sale.id.slice(-6)}`;
+    const plano = await planejarCancelamento({
+      api: base44.entities, companyId: company.id, venda: sale,
+      // A baixa do PDV é ligada à própria venda.
+      estoque: { id: sale.id, tipo: 'sale' },
+      hoje: hoje(), descricao,
+    });
+    if (plano.bloqueio) {
+      toast({ title: 'Não é possível cancelar', description: plano.bloqueio, variant: 'destructive' });
+      return;
+    }
+    if (!window.confirm(avisoDeCancelamento(plano, { oque: `a venda ${descricao}`, formatar: formatCurrency }))) return;
+
+    setCancelando(sale.id);
+    try {
+      const r = await executarCancelamento({ api: base44.entities, venda: sale, plano });
+      const partes = [
+        r.devolvido > 0 ? `${formatCurrency(r.devolvido)} lançados como devolução ao cliente.` : null,
+        r.pecas > 0 ? `${r.pecas} peça(s) de volta ao estoque.` : null,
+        r.parcelas > 0 ? `${r.parcelas} parcela(s) em aberto cancelada(s).` : null,
+      ].filter(Boolean);
+      toast({ title: 'Venda cancelada', description: partes.join(' ') || undefined });
+      loadData();
+    } catch (e) {
+      toast({ title: 'Erro ao cancelar', description: `${e.message} Tente de novo: o que já foi feito não se repete.`, variant: 'destructive' });
+    } finally {
+      setCancelando(null);
     }
   };
 
@@ -639,8 +681,15 @@ export default function Historico() {
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
+                            {sale.status !== VENDA_CANCELADA && (
+                              <button onClick={() => handleCancelSale(sale)} disabled={cancelando === sale.id}
+                                className="p-1.5 rounded hover:bg-orange-100 text-orange-600 disabled:opacity-40"
+                                title="Cancelar e devolver ao cliente">
+                                <Undo2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                             <button onClick={() => setConfirmDelete({ type: 'sale', item: sale })}
-                              className="p-1.5 rounded hover:bg-red-100 text-red-500" title="Excluir venda">
+                              className="p-1.5 rounded hover:bg-red-100 text-red-500" title="Excluir venda (lançada por engano)">
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           </div>

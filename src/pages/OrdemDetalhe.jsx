@@ -17,11 +17,9 @@ import EmitirNotaButton from '@/components/EmitirNotaButton';
 import EmitirNfseButton from '@/components/EmitirNfseButton';
 import { printDocument } from '@/components/PrintReceipt';
 import { revisoesDaOrdem } from '@/lib/crm';
-import { saldoADevolver, devolucaoDeEstoque } from '@/lib/estoque';
-import { notaAutorizadaDe, motivoNaoExcluir } from '@/lib/nfse-dados';
-import { estornoDaVenda, VENDA_CANCELADA } from '@/lib/caixa';
 import { hoje } from '@/lib/datas';
 import { acoesDaOrdem } from '@/lib/ordens';
+import { planejarCancelamento, executarCancelamento, avisoDeCancelamento } from '@/lib/cancelamento';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import RevisoesVeiculo from '@/components/RevisoesVeiculo';
 
@@ -197,90 +195,36 @@ export default function OrdemDetalhe() {
   };
 
   const cancelOrder = async () => {
-    // Cancelar a OS não cancela a nota: com NFS-e autorizada, o governo
-    // continuaria considerando o serviço prestado e o ISS devido, enquanto
-    // o sistema diria que ele não aconteceu. Busca na hora — a tela não
-    // carrega as notas, e a trava não pode depender de ter carregado.
-    const notas = await base44.entities.NFeRecord.filter({ company_id: company.id, work_order_id: id })
-      .catch(() => []);
-    const nota = notaAutorizadaDe(notas, { workOrderId: id, saleId: order?.sale_id });
-    if (nota) {
-      toast({ title: 'Não é possível cancelar', description: motivoNaoExcluir(nota), variant: 'destructive' });
+    // A lógica mora em lib/cancelamento.js, a mesma do cancelamento de
+    // venda do PDV: nota autorizada trava, OS paga devolve o dinheiro, as
+    // peças voltam, e o que marca "cancelado" é gravado por último.
+    const venda = order?.sale_id ? await base44.entities.Sale.get(order.sale_id).catch(() => null) : null;
+    const plano = await planejarCancelamento({
+      api: base44.entities, companyId: company.id, venda,
+      // A baixa da OS é ligada à OS, não à venda.
+      estoque: { id, tipo: 'work_order' }, workOrderId: id,
+      hoje: hoje(), descricao: `OS #${order.order_number || ''}`,
+    });
+    if (plano.bloqueio) {
+      toast({ title: 'Não é possível cancelar', description: plano.bloqueio, variant: 'destructive' });
       return;
     }
+    if (!confirm(avisoDeCancelamento(plano, { oque: 'esta OS', formatar: formatCurrency }))) return;
 
-    // OS paga: o lojista devolve o dinheiro ao cliente. O estorno sai do
-    // que ENTROU de verdade (fechamento + parcelas já pagas), e é mostrado
-    // antes de confirmar — quem cancela precisa saber quanto vai devolver.
-    let venda = null;
-    let titulos = [];
-    let estorno = { valor: 0, lancamentos: [], titulosACancelar: [] };
-    if (order?.sale_id) {
-      venda = await base44.entities.Sale.get(order.sale_id).catch(() => null);
-      if (venda) {
-        titulos = await base44.entities.CreditTitle.filter({ company_id: company.id, sale_id: venda.id })
-          .catch(() => []);
-        const daVenda = await base44.entities.AccountingEntry.filter({ company_id: company.id, reference_id: venda.id })
-          .catch(() => []);
-        const dasParcelas = (await Promise.all(titulos.map(t =>
-          base44.entities.AccountingEntry.filter({ company_id: company.id, reference_id: t.id }).catch(() => []),
-        ))).flat();
-        estorno = estornoDaVenda({
-          venda, titulos, lancamentos: [...daVenda, ...dasParcelas],
-          data: hoje(), descricao: `OS #${order.order_number || ''}`, companyId: company.id,
-        });
-      }
-    }
-
-    const aviso = estorno.valor > 0
-      ? `Cancelar esta OS?\n\nO cliente recebe ${formatCurrency(estorno.valor)} de volta. `
-        + 'A saída é lançada no caixa hoje.'
-        + (estorno.titulosACancelar.length ? `\n${estorno.titulosACancelar.length} parcela(s) em aberto serão canceladas.` : '')
-      : 'Cancelar esta OS?';
-    if (!confirm(aviso)) return;
     setUpdating(true);
     try {
-      // Dinheiro primeiro, status por último: se algo falhar no meio, a OS
-      // continua como estava e cancelar de novo não devolve duas vezes (o
-      // estorno desconta o que já foi devolvido).
-      for (const l of estorno.lancamentos) await base44.entities.AccountingEntry.create(l);
-      for (const tid of estorno.titulosACancelar) {
-        await base44.entities.CreditTitle.update(tid, { status: 'cancelado' });
-      }
-      if (venda && venda.status !== VENDA_CANCELADA) {
-        await base44.entities.Sale.update(venda.id, { status: VENDA_CANCELADA });
-      }
-
-      // Se a OS já foi paga, as peças saíram da prateleira. Cancelar sem
-      // devolvê-las deixaria o estoque do sistema menor que o real, e a
-      // oficina compraria peça que já tem.
-      // Movimento primeiro, saldo depois — ver devolucaoDeEstoque.
-      const movimentos = await base44.entities.StockMovement.filter({ reference_id: id });
-      const estoqueAtual = {};
-      for (const { part_id } of saldoADevolver(movimentos)) {
-        const part = await base44.entities.Part.get(part_id);
-        estoqueAtual[part_id] = part?.stock_quantity || 0;
-      }
-      const pendentes = devolucaoDeEstoque({
-        movimentos, estoqueAtual, referenceId: id, referenceType: 'work_order',
-        motivo: `Cancelamento da OS #${order.order_number || ''}`, companyId: company.id,
-      });
-      for (const passo of pendentes) {
-        await base44.entities.StockMovement.create(passo.movimento);
-        await base44.entities.Part.update(passo.part_id, { stock_quantity: passo.novoEstoque });
-      }
-
+      const r = await executarCancelamento({ api: base44.entities, venda, plano });
       await base44.entities.WorkOrder.update(id, { status: 'cancelada' });
       setOrder(prev => ({ ...prev, status: 'cancelada' }));
       const partes = [
-        estorno.valor > 0 ? `${formatCurrency(estorno.valor)} lançados como devolução ao cliente.` : null,
-        pendentes.length > 0
-          ? `${pendentes.length} peça(s) devolvida(s) ao estoque.`
+        r.devolvido > 0 ? `${formatCurrency(r.devolvido)} lançados como devolução ao cliente.` : null,
+        r.pecas > 0
+          ? `${r.pecas} peça(s) devolvida(s) ao estoque.`
           : 'Nenhuma peça a devolver — esta OS não tinha baixado estoque.',
       ].filter(Boolean);
       toast({ title: 'OS cancelada', description: partes.join(' ') });
     } catch (e) {
-      toast({ title: 'Erro ao cancelar', description: e.message, variant: 'destructive' });
+      toast({ title: 'Erro ao cancelar', description: `${e.message} Tente de novo: o que já foi feito não se repete.`, variant: 'destructive' });
     } finally {
       setUpdating(false);
     }

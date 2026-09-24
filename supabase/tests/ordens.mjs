@@ -50,5 +50,17 @@ ok(/acoes\.cancelarDevolveDinheiro[\s\S]{0,900}onClick=\{cancelOrder\}/.test(tel
   'o bloco de OS paga chama cancelOrder');
 ok(/isActive = acoes\.podeMudarEstado/.test(tela), 'o bloco de OS em aberto usa a mesma regra');
 
+console.log('--- PDV: venda de balcao tambem cancela com devolucao ---');
+// Antes, venda de balcao devolvida so podia ser EXCLUIDA — o que apaga a
+// venda do mes em que foi feita, em vez de registrar a devolucao no dia.
+const hist = readFileSync('/home/user/Giropecas/src/pages/Historico.jsx', 'utf8');
+ok(/const handleCancelSale = async/.test(hist), 'o Historico tem o cancelamento de venda');
+ok(/sale\.status !== VENDA_CANCELADA[\s\S]{0,300}handleCancelSale\(sale\)/.test(hist),
+  'o botao aparece para toda venda nao cancelada');
+ok(/planejarCancelamento\(/.test(hist) && /executarCancelamento\(/.test(hist), 'o PDV usa o modulo compartilhado');
+ok(/planejarCancelamento\(/.test(tela) && /executarCancelamento\(/.test(tela), 'a OS usa o MESMO modulo');
+ok(!/estornoDaVenda\(/.test(tela) && !/estornoDaVenda\(/.test(hist),
+  'nenhuma das telas refaz a conta do estorno por conta propria');
+
 console.log(f === 0 ? '\n✅ ACOES DA OS OK' : `\n❌ ${f} falha(s)`);
 process.exit(f ? 1 : 0);

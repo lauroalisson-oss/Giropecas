@@ -10,6 +10,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend
 } from 'recharts';
 import { DollarSign, Target, TrendingUp, TrendingDown, Percent, ChevronDown, ChevronUp } from 'lucide-react';
+import { hoje, diaLocal, diaDoRegistro } from '@/lib/datas';
 
 // Persist goals in localStorage per company
 const GOAL_KEY = (companyId) => `motoflow_goal_${companyId}`;
@@ -99,7 +100,7 @@ export default function FinancialPanel() {
 
   const loadData = async (currentGoal, cRate) => {
     setLoading(true);
-    const today = new Date().toISOString().split('T')[0];
+    const today = hoje();
 
     const [sales, orders, parts] = await Promise.all([
       base44.entities.Sale.filter({ company_id: company.id }, '-created_date', 500),
@@ -111,7 +112,7 @@ export default function FinancialPanel() {
     const orderMap = Object.fromEntries(orders.map(o => [o.id, o]));
 
     // Today
-    const todaySales = sales.filter(s => s.created_date?.startsWith(today) && s.status === 'pago');
+    const todaySales = sales.filter(s => diaDoRegistro(s.created_date) === today && s.status === 'pago');
     const todayRevenue = todaySales.reduce((s, x) => s + (x.total || 0), 0);
     const todayFees = todaySales.reduce((s, x) => s + extractFeeFromSale(x), 0);
     const todayCOGS = todaySales.reduce((s, x) => s + extractCOGSFromSale(x, partMap, orderMap), 0);
@@ -135,8 +136,8 @@ export default function FinancialPanel() {
     const weekChart = Array.from({ length: 7 }, (_, i) => {
       const d = new Date();
       d.setDate(d.getDate() - (6 - i));
-      const dateStr = d.toISOString().split('T')[0];
-      const daySales = sales.filter(s => s.created_date?.startsWith(dateStr) && s.status === 'pago');
+      const dateStr = diaLocal(d);
+      const daySales = sales.filter(s => diaDoRegistro(s.created_date) === dateStr && s.status === 'pago');
       const revenue = daySales.reduce((s, x) => s + (x.total || 0), 0);
       const fees = daySales.reduce((s, x) => s + extractFeeFromSale(x), 0);
       const cogs = daySales.reduce((s, x) => s + extractCOGSFromSale(x, partMap, orderMap), 0);

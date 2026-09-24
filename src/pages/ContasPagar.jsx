@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { Plus, Trash2, CheckCircle2, Calendar, Wallet, AlertTriangle, Search } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { podePagar, impactoExclusaoConta } from '@/lib/compras';
+import { hoje } from '@/lib/datas';
 
 const CATEGORIES = [
   { value: 'aluguel', label: 'Aluguel' },
@@ -63,7 +64,7 @@ export default function ContasPagar() {
       base44.entities.Supplier.filter({ company_id: company.id, is_active: true }),
     ]);
     // Auto-mark overdue
-    const today = new Date().toISOString().split('T')[0];
+    const today = hoje();
     const updated = billsData.map(b => {
       if (b.status === 'a_vencer' && b.due_date < today) return { ...b, status: 'vencido' };
       return b;
@@ -110,7 +111,7 @@ export default function ContasPagar() {
     setOcupado(bill.id);
 
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const today = hoje();
       await base44.entities.Bill.update(bill.id, { status: 'pago', payment_date: today });
       await base44.entities.AccountingEntry.create({
         company_id: company.id,

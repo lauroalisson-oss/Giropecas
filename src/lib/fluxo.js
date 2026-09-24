@@ -11,12 +11,14 @@
 
 import { emAberto, estaQuitado } from './crediario';
 import { situacaoCompra } from './compras';
+import { hoje, diaLocal } from './datas';
 
 const centavos = (v) => Math.round((Number(v) || 0) * 100);
 const reais = (c) => Math.round(c) / 100;
 const soma = (lista) => reais(lista.reduce((s, x) => s + centavos(x.valor), 0));
 
-const hojeISO = () => new Date().toISOString().split('T')[0];
+// O dia da OFICINA, nao o de Greenwich — ver lib/datas.js.
+const hojeISO = () => hoje();
 
 /**
  * Contas a receber: parcelas de crediário ainda em aberto.
@@ -103,7 +105,7 @@ export function projetarFluxo({ titulos, contas, compras, lancamentos, hoje = ho
   for (let i = 0; i < dias; i++) {
     const d = new Date(base);
     d.setDate(d.getDate() + i);
-    const dia = d.toISOString().split('T')[0];
+    const dia = diaLocal(d);
     projecao.push({
       data: dia,
       rotulo: d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
@@ -115,7 +117,7 @@ export function projetarFluxo({ titulos, contas, compras, lancamentos, hoje = ho
   const ate = (janela) => {
     const d = new Date(base);
     d.setDate(d.getDate() + janela);
-    const limite = d.toISOString().split('T')[0];
+    const limite = diaLocal(d);
     const r = soma(receber.aVencer.filter(x => x.data <= limite));
     const p = soma(pagar.aVencer.filter(x => x.data <= limite));
     return { receber: r, pagar: p, saldo: reais(centavos(r) - centavos(p)) };

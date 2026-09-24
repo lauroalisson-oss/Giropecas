@@ -6,6 +6,7 @@
 
 import { emAberto, estaVencido, estaQuitado } from './crediario';
 import { geraComissao } from './comissoes';
+import { hoje as hojeLocal } from './datas';
 
 const centavos = (v) => Math.round((Number(v) || 0) * 100);
 const reais = (c) => Math.round(c) / 100;
@@ -107,7 +108,7 @@ export function comissoes(ordens, tecnicoPorId) {
  * vendido a prazo: dividir pelo histórico faz a taxa encolher sozinha a
  * cada venda nova, escondendo a piora.
  */
-export function inadimplencia(titulos, hoje = new Date().toISOString().split('T')[0]) {
+export function inadimplencia(titulos, hoje = hojeLocal()) {
   const abertos = (titulos || []).filter(t => t && t.status !== 'cancelado' && !estaQuitado(t));
 
   const emAbertoC = abertos.reduce((s, t) => s + centavos(emAberto(t)), 0);

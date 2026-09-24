@@ -10,6 +10,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { Download, TrendingUp, TrendingDown, Package, ClipboardList } from 'lucide-react';
 import FluxoCaixaTab from '@/components/relatorios/FluxoCaixaTab';
 import RelatoriosGerenciais from '@/components/relatorios/RelatoriosGerenciais';
+import { diaLocal, diaDoRegistro } from '@/lib/datas';
 
 const COLORS = ['#dc2626', '#1a1a1a', '#6b7280', '#f97316', '#22c55e'];
 
@@ -66,8 +67,8 @@ export default function Relatorios() {
   // Daily sales chart (last 30 days)
   const dailySales = Array.from({ length: 30 }, (_, i) => {
     const d = new Date(); d.setDate(d.getDate() - (29 - i));
-    const dateStr = d.toISOString().split('T')[0];
-    const daySales = data.sales.filter(s => s.created_date?.startsWith(dateStr));
+    const dateStr = diaLocal(d);
+    const daySales = data.sales.filter(s => diaDoRegistro(s.created_date) === dateStr);
     return { day: d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }), total: daySales.reduce((s, x) => s + (x.total || 0), 0) };
   });
 

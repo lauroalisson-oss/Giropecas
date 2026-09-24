@@ -11,6 +11,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { dividirPagamento, lancamentosDaVenda, taxaDeCartao, totalDeTaxas } from '@/lib/caixa';
 import { avisoFaltaEmEstoque } from '@/lib/estoque';
 import { CreditCard, DollarSign, PlusCircle, X } from 'lucide-react';
+import { hoje, somarMeses } from '@/lib/datas';
 
 const ALL_METHODS = [
   { value: 'dinheiro', label: 'Dinheiro' },
@@ -169,10 +170,12 @@ export default function PagamentoModal({ order, customer, onClose, onSuccess }) 
 
       // Crediário titles
       if (hasCrediario) {
-        const today = new Date();
+        // Vencimento: somarMeses segura o dia 31 no último dia do mês.
+        // setMonth cru jogava 31/01 + 1 mês em 03/03 — a parcela de
+        // fevereiro sumia e o cliente recebia duas cobranças em março.
+        const base = hoje();
         for (let i = 0; i < installments; i++) {
-          const dueDate = new Date(today);
-          dueDate.setMonth(dueDate.getMonth() + i + 1);
+          const dueDate = somarMeses(base, i + 1);
           await base44.entities.CreditTitle.create({
             company_id: company.id, customer_id: order.customer_id, sale_id: sale.id,
             title_number: `${sale.id.slice(-6)}-${String(i + 1).padStart(2, '0')}`,
@@ -180,7 +183,7 @@ export default function PagamentoModal({ order, customer, onClose, onSuccess }) 
             original_amount: installmentAmount,
             interest_amount: installmentAmount - (remainingForCredit / installments),
             total_amount: installmentAmount, paid_amount: 0, remaining_amount: installmentAmount,
-            due_date: dueDate.toISOString().split('T')[0], status: 'a_vencer',
+            due_date: dueDate, status: 'a_vencer',
           });
         }
       }
@@ -197,7 +200,7 @@ export default function PagamentoModal({ order, customer, onClose, onSuccess }) 
         taxas: totalFees,
         categoria: 'Vendas OS',
         descricao: `Venda OS #${order.order_number}`,
-        data: new Date().toISOString().split('T')[0],
+        data: hoje(),
         saleId: sale.id,
         companyId: company.id,
       });

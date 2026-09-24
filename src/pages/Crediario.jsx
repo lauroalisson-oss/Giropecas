@@ -13,6 +13,7 @@ import { Search, CreditCard, CheckCircle, AlertTriangle, ChevronDown, ChevronUp,
 import { useToast } from '@/components/ui/use-toast';
 import { validarPagamento, aplicarPagamento, emAberto } from '@/lib/crediario';
 import CarneModal from '@/components/CarneModal';
+import { hoje } from '@/lib/datas';
 
 export default function Crediario() {
   const { company } = useCompany();
@@ -28,7 +29,7 @@ export default function Crediario() {
   // Payment modal state
   const [payingTitle, setPayingTitle] = useState(null);
   const [paymentAmount, setPaymentAmount] = useState('');
-  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
+  const [paymentDate, setPaymentDate] = useState(hoje());
   const [paying, setPaying] = useState(false);
 
   // Expanded groups
@@ -46,7 +47,7 @@ export default function Crediario() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const today = hoje();
       const [tits, custs, saleList] = await Promise.all([
         base44.entities.CreditTitle.filter({ company_id: company.id }, '-due_date', 500),
         base44.entities.Customer.filter({ company_id: company.id }),

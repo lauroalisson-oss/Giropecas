@@ -14,6 +14,7 @@ import { dividirPagamento, lancamentosDaVenda, taxaDeCartao, totalDeTaxas } from
 import { faltaEmEstoque, avisoFaltaEmEstoque } from '@/lib/estoque';
 import { pendenciasCrediario } from '@/lib/crm';
 import StatusCrediario from '@/components/StatusCrediario';
+import { hoje, somarMeses } from '@/lib/datas';
 
 const ALL_METHODS = [
   { value: 'dinheiro', label: 'Dinheiro' },
@@ -202,17 +203,18 @@ export default function PDV() {
 
       // Generate credit titles for crediario payment
       if (hasCrediario) {
-        const today = new Date();
+        // Vencimento: ver o mesmo trecho em PagamentoModal — dia 31 não
+        // pode pular o mês seguinte.
+        const base = hoje();
         for (let i = 0; i < installments; i++) {
-          const dueDate = new Date(today);
-          dueDate.setMonth(dueDate.getMonth() + i + 1);
+          const dueDate = somarMeses(base, i + 1);
           await base44.entities.CreditTitle.create({
             company_id: company.id, customer_id: selectedCustomer, sale_id: sale.id,
             title_number: `${sale.id.slice(-6)}-${String(i + 1).padStart(2, '0')}`,
             installment_number: i + 1, total_installments: installments,
             original_amount: installmentAmount, total_amount: installmentAmount,
             paid_amount: 0, remaining_amount: installmentAmount,
-            due_date: dueDate.toISOString().split('T')[0], status: 'a_vencer',
+            due_date: dueDate, status: 'a_vencer',
           });
         }
       }
@@ -227,7 +229,7 @@ export default function PDV() {
         taxas: totalFees,
         categoria: 'Vendas PDV',
         descricao: 'Venda PDV',
-        data: new Date().toISOString().split('T')[0],
+        data: hoje(),
         saleId: sale.id,
         companyId: company.id,
       });

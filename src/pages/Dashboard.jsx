@@ -13,6 +13,8 @@ import {
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
 import FinancialPanel from '@/components/FinancialPanel';
+import { hoje, diaLocal, diaDoRegistro } from '@/lib/datas';
+import { estaVencido, emAberto } from '@/lib/crediario';
 
 export default function Dashboard() {
   const { company } = useCompany();
@@ -29,7 +31,7 @@ export default function Dashboard() {
   const loadDashboard = async () => {
     setLoading(true);
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const today = hoje();
       const [orders, sales, parts, credits] = await Promise.all([
         base44.entities.WorkOrder.filter({ company_id: company.id }),
         base44.entities.Sale.filter({ company_id: company.id }),
@@ -37,20 +39,27 @@ export default function Dashboard() {
         base44.entities.CreditTitle.filter({ company_id: company.id })
       ]);
 
-      const todaySales = sales.filter(s => s.created_date?.startsWith(today));
+      const todaySales = sales.filter(s => diaDoRegistro(s.created_date) === today);
       const todayTotal = todaySales.reduce((sum, s) => sum + (s.total || 0), 0);
 
       const openOrders = orders.filter(o => ['aberta', 'em_andamento', 'aguardando_peca'].includes(o.status));
       const lowStockParts = parts.filter(p => (p.stock_quantity || 0) <= (p.min_stock || 1));
-      const overdueItems = credits.filter(c => c.status === 'vencido');
+      // Vencido sai da DATA, não do status. 'vencido' nunca é gravado no
+      // banco — só existe em memória na tela de Crediário —, então filtrar
+      // por ele dava sempre vazio, e este card dizia "Nada em atraso!" para
+      // qualquer oficina. O mesmo bug já corrigido no relatório gerencial.
+      // Mais antigas primeiro: as cinco que aparecem são as que mais pesam.
+      const overdueItems = credits
+        .filter(c => estaVencido(c, today))
+        .sort((a, b) => String(a.due_date).localeCompare(String(b.due_date)));
 
       // Last 7 days sales
       const weekSales = Array.from({ length: 7 }, (_, i) => {
         const d = new Date();
         d.setDate(d.getDate() - (6 - i));
-        const dateStr = d.toISOString().split('T')[0];
+        const dateStr = diaLocal(d);
         const dayName = d.toLocaleDateString('pt-BR', { weekday: 'short' });
-        const daySales = sales.filter(s => s.created_date?.startsWith(dateStr));
+        const daySales = sales.filter(s => diaDoRegistro(s.created_date) === dateStr);
         return { day: dayName, total: daySales.reduce((sum, s) => sum + (s.total || 0), 0) };
       });
 
@@ -58,7 +67,9 @@ export default function Dashboard() {
         todaySales: todayTotal,
         openOrders: openOrders.length,
         lowStockCount: lowStockParts.length,
-        overdueCredit: overdueItems.reduce((sum, c) => sum + (c.remaining_amount || 0), 0),
+        // Em aberto = total − pago. remaining_amount é coluna derivada e
+        // pode ter ficado para trás.
+        overdueCredit: overdueItems.reduce((sum, c) => sum + Math.round(emAberto(c) * 100), 0) / 100,
         weekSales,
         recentOrders: openOrders.slice(0, 5),
         lowStockParts: lowStockParts.slice(0, 5),
@@ -272,7 +283,7 @@ export default function Dashboard() {
                         <p className="text-xs font-medium text-gray-800">Parc. {item.installment_number}/{item.total_installments}</p>
                         <p className="text-xs text-gray-400">Venc: {formatDate(item.due_date)}</p>
                       </div>
-                      <p className="text-xs font-bold text-red-600">{formatCurrency(item.remaining_amount)}</p>
+                      <p className="text-xs font-bold text-red-600">{formatCurrency(emAberto(item))}</p>
                     </div>
                   ))}
                 </div>

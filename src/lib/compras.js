@@ -16,6 +16,8 @@
 // e as duas estavam ao alcance de um clique duplo — a tela só escondia o
 // botão DEPOIS de recarregar, e o recarregamento leva alguns segundos.
 
+import { hoje } from './datas';
+
 const centavos = (v) => Math.round((Number(v) || 0) * 100);
 
 /**
@@ -93,7 +95,7 @@ export function podeRegistrarPagamento(compra) {
 export function dataDePagamento(informada) {
   const texto = String(informada || '').trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(texto)) return texto;
-  return new Date().toISOString().split('T')[0];
+  return hoje();
 }
 
 /**

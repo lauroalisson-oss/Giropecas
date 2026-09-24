@@ -5,7 +5,7 @@
 // leva a uma decisão ruim.
 
 import {
-  custoDasVendas, comissoes, inadimplencia, dre,
+  custoDasVendas, comissoes, inadimplencia, dre, vendaPorMeio, resumoDeVendas,
 } from '/home/user/Giropecas/src/lib/relatorios.js';
 
 let f = 0;
@@ -164,6 +164,88 @@ const comCancelada = dre({
 });
 ok(comCancelada.receita === 1000, `receita ignora a cancelada (deu ${comCancelada.receita})`);
 ok(comCancelada.cmv === 300, 'e o custo dela tambem — a peca voltou ao estoque');
+
+
+{ // escopo proprio: os nomes abaixo repetem os de cima
+console.log('--- Painel do dia: vendas por forma de pagamento ---');
+// A venda inteira ia para o metodo principal, e 'misto' caia em
+// "dinheiro": R$600 no credito apareciam como especie na gaveta.
+const misto = vendaPorMeio({
+  total: 1000, payment_method: 'misto',
+  payment_details: { payments: [{ method: 'cartao_credito', amount: 600 }, { method: 'dinheiro', amount: 400 }] },
+});
+ok(misto.credito === 600 && misto.dinheiro === 400, `divide 600 credito / 400 dinheiro (deu ${misto.credito}/${misto.dinheiro})`);
+
+// Troco nao e venda.
+const troco = vendaPorMeio({ total: 87.5, payment_details: { payments: [{ method: 'dinheiro', amount: 100 }] } });
+ok(troco.dinheiro === 87.5, 'entregou 100 numa venda de 87,50: dinheiro = 87,50, o troco nao conta');
+
+const trocoMisto = vendaPorMeio({ total: 150, payment_details: { payments: [{ method: 'pix', amount: 100 }, { method: 'dinheiro', amount: 100 }] } });
+ok(trocoMisto.pix === 100 && trocoMisto.dinheiro === 50, 'o troco sai do dinheiro, nunca do pix');
+
+// Crediario: entrada em dinheiro, o resto financiado.
+const cred = vendaPorMeio({ total: 1000, payment_details: { payments: [{ method: 'crediario', amount: 1000 }], downPayment: 200 } });
+ok(cred.dinheiro === 200 && cred.crediario === 800, 'crediario: 200 de entrada, 800 financiado');
+
+const credCartao = vendaPorMeio({ total: 1000, payment_details: { payments: [{ method: 'cartao_debito', amount: 300 }, { method: 'crediario', amount: 700 }], downPayment: 0 } });
+ok(credCartao.debito === 300 && credCartao.crediario === 700, 'cartao + crediario sem entrada');
+
+// Sem detalhes: o metodo da venda; desconhecido vai para "outros", nao para dinheiro.
+ok(vendaPorMeio({ total: 50, payment_method: 'pix' }).pix === 50, 'sem detalhes, usa o metodo da venda');
+ok(vendaPorMeio({ total: 50, payment_method: 'misto' }).outros === 50, 'misto sem detalhes vai para outros, nao para dinheiro');
+ok(vendaPorMeio({ total: 50, payment_method: 'misto' }).dinheiro === 0, 'e o dinheiro nao inventa nada');
+
+// Pagou menos que o total (dado incompleto): a diferenca aparece em outros.
+ok(vendaPorMeio({ total: 100, payment_details: { payments: [{ method: 'pix', amount: 60 }] } }).outros === 40,
+  'o que nao se sabe como entrou aparece, nao some');
+
+const somaMeios = (m) => Object.values(m).reduce((s, v) => s + Math.round(v * 100), 0) / 100;
+ok(somaMeios(misto) === 1000 && somaMeios(cred) === 1000 && somaMeios(troco) === 87.5, 'os baldes sempre somam o total da venda');
+ok(somaMeios(vendaPorMeio(null)) === 0, 'venda nula');
+
+console.log('--- Painel do dia: o lucro sai das mesmas contas do DRE ---');
+const tecDia = { m1: { id: 'm1', name: 'Joao', commission_percent: 10 }, m2: { id: 'm2', name: 'Ana', commission_percent: 20 } };
+const vendasDia = [
+  { id: 'v1', total: 1000, status: 'pago', work_order_id: 'os1',
+    payment_details: { totalFees: 30, payments: [{ method: 'cartao_credito', amount: 1000 }] },
+    items: [{ type: 'part', part_id: 'oleo', quantity: 2, cost_price: 25 }, { type: 'service', total_price: 500 }] },
+  { id: 'v2', total: 500, status: 'pago', work_order_id: 'os2',
+    payment_details: { payments: [{ method: 'dinheiro', amount: 500 }] },
+    items: [{ type: 'service', total_price: 500 }] },
+  { id: 'v3', total: 700, status: 'cancelado', work_order_id: 'os3', items: [] },
+];
+const ordensDia = [
+  { id: 'os1', mechanic_id: 'm1', status: 'faturada', service_items: [{ total_price: 500 }] },
+  { id: 'os2', mechanic_id: 'm2', status: 'faturada', service_items: [{ total_price: 500 }] },
+  { id: 'os3', mechanic_id: 'm1', status: 'cancelada', service_items: [{ total_price: 700 }] },
+  { id: 'os9', mechanic_id: 'm1', status: 'faturada', service_items: [{ total_price: 9999 }] }, // de outro dia
+];
+const r = resumoDeVendas({ vendas: vendasDia, ordens: ordensDia, pecaPorId: pecas, tecnicoPorId: tecDia });
+ok(r.faturamento === 1500, `faturamento ignora a cancelada (deu ${r.faturamento})`);
+ok(r.taxas === 30, 'taxa gravada na venda');
+// Custo do ITEM (25), nao do cadastro atual (30).
+ok(r.cmv === 50, `custo pelo item: 2 x 25 = 50, nao 2 x 30 do cadastro (deu ${r.cmv})`);
+// Comissao POR MECANICO: 10% de 500 + 20% de 500. Uma taxa unica daria outro numero.
+ok(r.comissoes === 150, `comissao de cada mecanico: 50 + 100 (deu ${r.comissoes})`);
+ok(r.lucro === 1270, `lucro = 1500 - 30 - 50 - 150 (deu ${r.lucro})`);
+ok(r.porMeio.credito === 1000 && r.porMeio.dinheiro === 500, 'por meio soma as vendas do dia');
+
+// Bate com o DRE para as mesmas vendas e ordens.
+const d = dre({ vendas: vendasDia, ordens: ordensDia.filter(o => o.id !== 'os9'), pecaPorId: pecas, tecnicoPorId: tecDia });
+ok(d.cmv === r.cmv && d.comissoes === r.comissoes && d.receita === r.faturamento, 'custo, comissao e receita iguais aos do DRE');
+
+// OS de outro dia nao entra na comissao de hoje.
+ok(r.comissoes !== 1149.9 && r.comissoes === 150, 'OS sem venda neste periodo nao gera comissao aqui');
+
+// Prejuizo aparece como prejuizo.
+const prej = resumoDeVendas({
+  vendas: [{ total: 100, status: 'pago', payment_details: { totalFees: 5 }, items: [{ type: 'part', part_id: 'oleo', quantity: 5, cost_price: 30 }] }],
+  pecaPorId: pecas,
+});
+ok(prej.lucro === -55, `dia de prejuizo: 100 - 5 - 150 = -55 (deu ${prej.lucro})`);
+ok(resumoDeVendas({}).lucro === 0, 'sem vendas, lucro zero');
+ok(resumoDeVendas({ vendas: [{ total: 0.1, status: 'pago' }, { total: 0.2, status: 'pago' }] }).faturamento === 0.3, 'centavos exatos');
+}
 
 console.log(f === 0 ? '\n✅ RELATORIOS GERENCIAIS OK' : `\n❌ ${f} falha(s)`);
 process.exit(f ? 1 : 0);

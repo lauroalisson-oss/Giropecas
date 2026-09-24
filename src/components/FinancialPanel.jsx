@@ -7,10 +7,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from 'recharts';
 import { DollarSign, Target, TrendingUp, TrendingDown, Percent, ChevronDown, ChevronUp } from 'lucide-react';
 import { hoje, diaLocal, diaDoRegistro } from '@/lib/datas';
+import { resumoDeVendas } from '@/lib/relatorios';
 
 // Persist goals in localStorage per company
 const GOAL_KEY = (companyId) => `motoflow_goal_${companyId}`;
@@ -22,49 +23,10 @@ function saveGoal(companyId, value) {
   try { localStorage.setItem(GOAL_KEY(companyId), String(value)); } catch {}
 }
 
-// Derive card fee from payment_details stored on the sale
-function extractFeeFromSale(sale) {
-  const details = sale.payment_details || {};
-  // If totalFees was stored (new PDV format)
-  if (details.totalFees) return parseFloat(details.totalFees) || 0;
-  return 0;
-}
-
-// COGS from a Sale record (PDV: items array; OS: look up work order parts_items)
-function extractCOGSFromSale(sale, partMap, orderMap) {
-  let cogs = 0;
-  if (sale.type === 'pdv') {
-    for (const item of sale.items || []) {
-      if (item.type === 'part' || item.part_id) {
-        const part = partMap[item.part_id || item.id];
-        const costPrice = part?.cost_price ?? item.cost_price ?? 0;
-        cogs += costPrice * (item.quantity || 1);
-      }
-    }
-  } else if (sale.type === 'os' && sale.work_order_id) {
-    const order = orderMap[sale.work_order_id];
-    for (const item of order?.parts_items || []) {
-      const part = partMap[item.part_id];
-      const costPrice = part?.cost_price ?? item.cost_price ?? 0;
-      cogs += costPrice * (item.quantity || 1);
-    }
-  }
-  return cogs;
-}
-
-// Commissions based on service revenue in a Sale (OS type) or via work order
-function extractCommissionsFromSale(sale, orderMap, commissionRate) {
-  if (!commissionRate) return 0;
-  let serviceRevenue = 0;
-  if (sale.type === 'os' && sale.work_order_id) {
-    const order = orderMap[sale.work_order_id];
-    for (const si of order?.service_items || []) {
-      serviceRevenue += si.total_price || (si.unit_price || 0) * (si.hours || 1);
-    }
-  }
-  // For PDV, no service commission (parts only)
-  return serviceRevenue * (commissionRate / 100);
-}
+// As contas deste painel moram em lib/relatorios.js (resumoDeVendas), as
+// mesmas do DRE. Aqui havia cópias próprias: custo pelo cadastro atual,
+// comissão por uma taxa única guardada no navegador, e "misto" contado
+// como dinheiro.
 
 export default function FinancialPanel() {
   const { company } = useCompany();
@@ -73,8 +35,6 @@ export default function FinancialPanel() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [goal, setGoal] = useState(0);
   const [goalInput, setGoalInput] = useState('');
-  const [commissionRate, setCommissionRate] = useState(0);
-  const [commissionInput, setCommissionInput] = useState('');
 
   const [data, setData] = useState({
     todayRevenue: 0,
@@ -83,72 +43,58 @@ export default function FinancialPanel() {
     todayCommissions: 0,
     todayNetProfit: 0,
     weekChart: [],
-    todayBreakdown: { dinheiro: 0, debito: 0, credito: 0, pix: 0, crediario: 0 },
+    todayBreakdown: { dinheiro: 0, debito: 0, credito: 0, pix: 0, crediario: 0, outros: 0 },
   });
 
   useEffect(() => {
     if (company?.id) {
       const g = loadGoal(company.id);
-      const cRate = parseFloat(localStorage.getItem(`motoflow_commission_${company.id}`)) || 0;
       setGoal(g);
       setGoalInput(String(g || ''));
-      setCommissionRate(cRate);
-      setCommissionInput(String(cRate || ''));
-      loadData(g, cRate);
+      loadData();
     }
   }, [company]);
 
-  const loadData = async (currentGoal, cRate) => {
+  const loadData = async () => {
     setLoading(true);
     const today = hoje();
 
-    const [sales, orders, parts] = await Promise.all([
+    const [sales, orders, parts, techs] = await Promise.all([
       base44.entities.Sale.filter({ company_id: company.id }, '-created_date', 500),
       base44.entities.WorkOrder.filter({ company_id: company.id }, '-created_date', 200),
       base44.entities.Part.filter({ company_id: company.id }),
+      // A comissão é a de CADA mecânico, do cadastro — não uma taxa única.
+      base44.entities.Technician.filter({ company_id: company.id }),
     ]);
 
-    const partMap = Object.fromEntries(parts.map(p => [p.id, p]));
-    const orderMap = Object.fromEntries(orders.map(o => [o.id, o]));
+    const contexto = {
+      ordens: orders,
+      pecaPorId: Object.fromEntries(parts.map(p => [p.id, p])),
+      tecnicoPorId: Object.fromEntries(techs.map(t => [t.id, t])),
+    };
+    const pagasNoDia = (dia) => sales.filter(s => diaDoRegistro(s.created_date) === dia && s.status === 'pago');
 
-    // Today
-    const todaySales = sales.filter(s => diaDoRegistro(s.created_date) === today && s.status === 'pago');
-    const todayRevenue = todaySales.reduce((s, x) => s + (x.total || 0), 0);
-    const todayFees = todaySales.reduce((s, x) => s + extractFeeFromSale(x), 0);
-    const todayCOGS = todaySales.reduce((s, x) => s + extractCOGSFromSale(x, partMap, orderMap), 0);
-    const todayCommissions = todaySales.reduce((s, x) => s + extractCommissionsFromSale(x, orderMap, cRate), 0);
+    const hojeR = resumoDeVendas({ vendas: pagasNoDia(today), ...contexto });
 
-    const todayNetProfit = todayRevenue - todayFees - todayCOGS - todayCommissions;
-
-    // Today breakdown by method
-    const todayBreakdown = todaySales.reduce((acc, s) => {
-      const m = s.payment_method;
-      if (m === 'dinheiro') acc.dinheiro += s.total || 0;
-      else if (m === 'cartao_debito') acc.debito += s.total || 0;
-      else if (m === 'cartao_credito') acc.credito += s.total || 0;
-      else if (m === 'pix') acc.pix += s.total || 0;
-      else if (m === 'crediario') acc.crediario += s.total || 0;
-      else acc.dinheiro += s.total || 0; // fallback
-      return acc;
-    }, { dinheiro: 0, debito: 0, credito: 0, pix: 0, crediario: 0 });
-
-    // Last 7 days chart
     const weekChart = Array.from({ length: 7 }, (_, i) => {
       const d = new Date();
       d.setDate(d.getDate() - (6 - i));
-      const dateStr = diaLocal(d);
-      const daySales = sales.filter(s => diaDoRegistro(s.created_date) === dateStr && s.status === 'pago');
-      const revenue = daySales.reduce((s, x) => s + (x.total || 0), 0);
-      const fees = daySales.reduce((s, x) => s + extractFeeFromSale(x), 0);
-      const cogs = daySales.reduce((s, x) => s + extractCOGSFromSale(x, partMap, orderMap), 0);
-      const commissions = daySales.reduce((s, x) => s + extractCommissionsFromSale(x, orderMap, cRate), 0);
-      const netProfit = revenue - fees - cogs - commissions;
+      const r = resumoDeVendas({ vendas: pagasNoDia(diaLocal(d)), ...contexto });
       return {
         day: d.toLocaleDateString('pt-BR', { weekday: 'short' }),
-        faturamento: parseFloat(revenue.toFixed(2)),
-        lucro: parseFloat(Math.max(0, netProfit).toFixed(2)),
+        faturamento: r.faturamento,
+        // Prejuízo aparece como prejuízo. Math.max(0, …) fazia o dia no
+        // vermelho virar um dia "zerado" no gráfico.
+        lucro: r.lucro,
       };
     });
+
+    const todayRevenue = hojeR.faturamento;
+    const todayFees = hojeR.taxas;
+    const todayCOGS = hojeR.cmv;
+    const todayCommissions = hojeR.comissoes;
+    const todayNetProfit = hojeR.lucro;
+    const todayBreakdown = hojeR.porMeio;
 
     setData({ todayRevenue, todayFees, todayCOGS, todayCommissions, todayNetProfit, weekChart, todayBreakdown });
     setLoading(false);
@@ -156,13 +102,9 @@ export default function FinancialPanel() {
 
   const handleSaveSettings = () => {
     const g = parseFloat(goalInput) || 0;
-    const c = parseFloat(commissionInput) || 0;
     setGoal(g);
-    setCommissionRate(c);
     saveGoal(company.id, g);
-    localStorage.setItem(`motoflow_commission_${company.id}`, String(c));
     setSettingsOpen(false);
-    loadData(g, c);
   };
 
   const goalPercent = goal > 0 ? Math.min(100, (data.todayRevenue / goal) * 100) : 0;
@@ -170,7 +112,9 @@ export default function FinancialPanel() {
 
   const metricCards = [
     {
-      label: 'Recebimentos do Dia',
+      // Soma o valor das vendas, inclusive o que ficou no crediário — é
+      // faturamento, não dinheiro recebido.
+      label: 'Faturamento do Dia',
       value: data.todayRevenue,
       icon: DollarSign,
       color: 'text-green-600',
@@ -213,7 +157,7 @@ export default function FinancialPanel() {
           className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-800 transition-colors"
         >
           <Target className="w-3.5 h-3.5" />
-          Meta & Comissão
+          Meta do dia
           {settingsOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
         </button>
       </div>
@@ -228,10 +172,8 @@ export default function FinancialPanel() {
                 <Input className="mt-1 h-8" type="number" min="0" step="100"
                   value={goalInput} onChange={e => setGoalInput(e.target.value)} placeholder="Ex: 3000" />
               </div>
-              <div>
-                <Label className="text-xs">Comissão sobre serviços (%)</Label>
-                <Input className="mt-1 h-8" type="number" min="0" step="0.5" max="100"
-                  value={commissionInput} onChange={e => setCommissionInput(e.target.value)} placeholder="Ex: 10" />
+              <div className="text-xs text-gray-500 self-end pb-1">
+                A comissão usa o percentual de cada mecânico, definido em Técnicos.
               </div>
             </div>
             <Button size="sm" className="mt-3 bg-red-600 hover:bg-red-700 text-white" onClick={handleSaveSettings}>
@@ -293,14 +235,18 @@ export default function FinancialPanel() {
       {!loading && data.todayRevenue > 0 && (
         <Card>
           <CardContent className="pt-3 pb-3">
-            <p className="text-xs font-semibold text-gray-600 mb-2">Recebimentos por forma de pagamento</p>
-            <div className="grid grid-cols-5 gap-1 text-center">
+            <p className="text-xs font-semibold text-gray-600 mb-2">Vendas por forma de pagamento</p>
+            <div className="grid grid-cols-3 sm:grid-cols-6 gap-1 text-center">
               {[
                 { key: 'dinheiro', label: 'Dinheiro', color: 'bg-green-100 text-green-700' },
                 { key: 'debito', label: 'Débito', color: 'bg-blue-100 text-blue-700' },
                 { key: 'credito', label: 'Crédito', color: 'bg-purple-100 text-purple-700' },
                 { key: 'pix', label: 'PIX', color: 'bg-teal-100 text-teal-700' },
                 { key: 'crediario', label: 'Crediário', color: 'bg-orange-100 text-orange-700' },
+                // Só aparece quando há valor que não dá para atribuir a um
+                // meio — antes isso era somado em "Dinheiro" em silêncio.
+                ...(data.todayBreakdown.outros > 0
+                  ? [{ key: 'outros', label: 'Outros', color: 'bg-gray-100 text-gray-700' }] : []),
               ].map(({ key, label, color }) => (
                 <div key={key} className={`rounded-lg px-1 py-2 ${color}`}>
                   <p className="text-xs font-bold">{formatCurrency(data.todayBreakdown[key])}</p>

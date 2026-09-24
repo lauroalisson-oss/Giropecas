@@ -83,3 +83,28 @@ export function escolherXml(nota, qual = 'nfse') {
   const id = nota?.number || nota?.rps_number || String(nota?.id || '').slice(-6);
   return { conteudo, nome: `${ehDps ? 'DPS' : 'NFSe'}-${id}.xml`, ehDps };
 }
+
+// A nota fiscal AUTORIZADA ligada a uma OS ou venda, se houver.
+//
+// Excluir o documento não cancela a nota: ela continua válida no governo,
+// o ISS continua devido, e o registro dela fica apontando para uma OS que
+// não existe mais. O histórico excluía assim mesmo. Quem usa esta função
+// é a trava que obriga a cancelar a nota antes.
+//
+// Olha TODAS as notas do documento, não só a mais recente: uma nota
+// rejeitada depois de uma autorizada não pode esconder a autorizada.
+export function notaAutorizadaDe(notas, { workOrderId = null, saleId = null } = {}) {
+  if (!workOrderId && !saleId) return null;
+  return (notas || []).find(n =>
+    n && n.status === 'autorizada'
+    && ((workOrderId && n.work_order_id === workOrderId) || (saleId && n.sale_id === saleId)),
+  ) || null;
+}
+
+// Mensagem da trava, igual em qualquer tela que tente excluir.
+export function motivoNaoExcluir(nota) {
+  if (!nota) return null;
+  return `Este documento tem nota fiscal autorizada (nº ${nota.number || '—'}). `
+    + 'Excluir não cancela a nota: ela continuaria valendo no governo e o imposto '
+    + 'continuaria devido. Cancele a nota na tela de Notas Fiscais e depois exclua.';
+}

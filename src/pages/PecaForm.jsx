@@ -12,6 +12,7 @@ import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ArrowLeft, Save, Trash2, TrendingUp, Package, FileText, Info } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import { movimentoSaldoInicial } from '@/lib/estoque';
 
 const EMPTY = {
   sku: '', internal_code: '', barcode: '', lot: '', ncm: '', cfop_default: '5102', description: '', unit: 'un',
@@ -87,17 +88,28 @@ export default function PecaForm() {
         sale_price: parseFloat(form.sale_price) || 0,
         margin_percent: parseFloat(form.margin_percent) || 0,
         stock_quantity: parseFloat(form.stock_quantity) || 0,
-        min_stock: parseFloat(form.min_stock) || 1,
+        // 0 é mínimo válido (peça que não deve alertar). `|| 1` o apagava.
+        min_stock: Number.isFinite(parseFloat(form.min_stock)) ? Math.max(0, parseFloat(form.min_stock)) : 1,
         lead_time_days: parseInt(form.lead_time_days) || 1,
         cbs_rate: parseFloat(form.cbs_rate) || 0,
         ibs_rate: parseFloat(form.ibs_rate) || 0,
         cashback_percent: parseFloat(form.cashback_percent) || 0,
       };
       if (isEdit) {
-        await base44.entities.Part.update(id, payload);
+        // O estoque NÃO vai junto. Ele foi lido quando este formulário
+        // abriu; se uma venda saiu enquanto o dono mudava o preço, regravar
+        // o número velho desfazia a baixa da venda — sem deixar movimento
+        // nenhum. Estoque só muda por movimento: venda, compra, devolução ou
+        // ajuste (Peças → Gestão Avançada).
+        const { stock_quantity: _, ...semEstoque } = payload;
+        await base44.entities.Part.update(id, semEstoque);
         toast({ title: 'Peça atualizada!' });
       } else {
-        await base44.entities.Part.create(payload);
+        const criada = await base44.entities.Part.create(payload);
+        // O saldo com que a peça nasce vira movimento. Sem ele, a
+        // conferência de estoque nunca fechava para peça criada com saldo.
+        const inicial = movimentoSaldoInicial({ peca: criada, companyId: company.id });
+        if (inicial) await base44.entities.StockMovement.create(inicial);
         toast({ title: 'Peça cadastrada!' });
       }
       navigate('/pecas');
@@ -249,9 +261,16 @@ export default function PecaForm() {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label>Qtd. em Estoque</Label>
+                  <Label>{isEdit ? 'Qtd. em Estoque' : 'Estoque inicial'}</Label>
+                  {/* Na edição o campo é só leitura: ver o save. */}
                   <Input className="mt-1" type="number" min="0" value={form.stock_quantity}
+                    disabled={isEdit}
                     onChange={e => set('stock_quantity', parseFloat(e.target.value) || 0)} />
+                  {isEdit && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Para mudar, use <strong>Ajustar</strong> em Peças → Gestão Avançada.
+                    </p>
+                  )}
                 </div>
                 <div>
                   <Label>Estoque Mínimo</Label>

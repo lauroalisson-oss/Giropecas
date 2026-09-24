@@ -16,6 +16,7 @@ import FinancialPanel from '@/components/FinancialPanel';
 import { hoje, diaLocal, diaDoRegistro } from '@/lib/datas';
 import { estaVencido, emAberto } from '@/lib/crediario';
 import { vendaValida } from '@/lib/caixa';
+import { estoqueBaixo } from '@/lib/estoque';
 
 export default function Dashboard() {
   const { company } = useCompany();
@@ -45,7 +46,7 @@ export default function Dashboard() {
       const todayTotal = todaySales.reduce((sum, s) => sum + (s.total || 0), 0);
 
       const openOrders = orders.filter(o => ['aberta', 'em_andamento', 'aguardando_peca'].includes(o.status));
-      const lowStockParts = parts.filter(p => (p.stock_quantity || 0) <= (p.min_stock || 1));
+      const lowStockParts = parts.filter(estoqueBaixo);
       // Vencido sai da DATA, não do status. 'vencido' nunca é gravado no
       // banco — só existe em memória na tela de Crediário —, então filtrar
       // por ele dava sempre vazio, e este card dizia "Nada em atraso!" para

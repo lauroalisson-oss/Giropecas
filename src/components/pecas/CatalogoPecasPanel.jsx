@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Download, Package, Plus, Check, ChevronDown, ChevronRight, Bike, Car, Search } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
-import { formatCurrency } from '@/lib/formatters';
+import { movimentoSaldoInicial } from '@/lib/estoque';
 
 export default function CatalogoPecasPanel({ onImported }) {
   const { company } = useCompany();
@@ -42,7 +42,7 @@ export default function CatalogoPecasPanel({ onImported }) {
     const venda = parseFloat(vendas[`${tipo}-${catNome}-${idx}`]) || 0;
     setImporting(true);
     try {
-      await base44.entities.Part.create({
+      const criada = await base44.entities.Part.create({
         company_id: company.id,
         description: `${peca.description} (${grupo.label})`,
         ncm: peca.ncm,
@@ -54,6 +54,10 @@ export default function CatalogoPecasPanel({ onImported }) {
         min_stock: 1,
         is_active: true,
       });
+      // O saldo com que a peça nasce vira movimento — ver
+      // movimentoSaldoInicial. Sem ele, a conferência nunca fechava.
+      const inicial = movimentoSaldoInicial({ peca: criada, companyId: company.id, motivo: 'Saldo inicial (catálogo)' });
+      if (inicial) await base44.entities.StockMovement.create(inicial);
       setImportedIds(prev => new Set(prev).add(`${tipo}-${catNome}-${idx}`));
       toast({ title: `"${peca.description}" adicionada ao estoque!`, description: `${qtd} ${peca.unit} • NCM ${peca.ncm}` });
       if (onImported) onImported();
@@ -83,7 +87,11 @@ export default function CatalogoPecasPanel({ onImported }) {
         min_stock: 1,
         is_active: true,
       }));
-      await base44.entities.Part.bulkCreate(records);
+      const criadas = await base44.entities.Part.bulkCreate(records);
+      const iniciais = criadas
+        .map(peca => movimentoSaldoInicial({ peca, companyId: company.id, motivo: 'Saldo inicial (catálogo)' }))
+        .filter(Boolean);
+      if (iniciais.length) await base44.entities.StockMovement.bulkCreate(iniciais);
       itens.forEach(({ p, idx }) => setImportedIds(prev => new Set(prev).add(`${tipo}-${cat.nome}-${idx}`)));
       toast({ title: `${itens.length} peças importadas!`, description: `Categoria: ${cat.nome}` });
       if (onImported) onImported();

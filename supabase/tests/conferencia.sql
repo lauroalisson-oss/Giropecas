@@ -55,9 +55,16 @@ estoque as (
   join public.companies c on c.id = p.company_id
   left join (
     select part_id,
+           -- Espelho de efeitoNoSaldo() em src/lib/estoque.js.
+           -- O ajuste grava a diferença em módulo; o sinal sai do
+           -- antes/depois. Antes contava zero, e toda peça ajustada
+           -- aparecia como divergente para sempre.
            sum(case
                  when type in ('entrada', 'devolucao') then quantity
                  when type = 'saida' then -quantity
+                 when type = 'ajuste' then
+                   case when coalesce(new_stock, 0) - coalesce(previous_stock, 0) >= 0
+                        then quantity else -quantity end
                  else 0
                end) as saldo
     from public.stock_movements

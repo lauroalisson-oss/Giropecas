@@ -12,6 +12,7 @@ import FluxoCaixaTab from '@/components/relatorios/FluxoCaixaTab';
 import RelatoriosGerenciais from '@/components/relatorios/RelatoriosGerenciais';
 import { diaLocal, diaDoRegistro } from '@/lib/datas';
 import { vendaValida } from '@/lib/caixa';
+import { estoqueBaixo } from '@/lib/estoque';
 
 const COLORS = ['#dc2626', '#1a1a1a', '#6b7280', '#f97316', '#22c55e'];
 
@@ -57,7 +58,7 @@ export default function Relatorios() {
   const totalRevenue = filteredSales.reduce((s, x) => s + (x.total || 0), 0);
   const totalOrders = data.orders.filter(o => periodFilter(o.created_date)).length;
   const avgTicket = filteredSales.length > 0 ? totalRevenue / filteredSales.length : 0;
-  const lowStockCount = data.parts.filter(p => (p.stock_quantity || 0) <= (p.min_stock || 1)).length;
+  const lowStockCount = data.parts.filter(estoqueBaixo).length;
 
   // Revenue by payment method
   const byMethod = filteredSales.reduce((acc, s) => {

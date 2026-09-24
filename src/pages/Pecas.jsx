@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Plus, Search, Package, AlertTriangle, ChevronRight } from 'lucide-react';
 import EstoqueAvancadoPanel from '@/components/pecas/EstoqueAvancadoPanel';
 import CatalogoPecasPanel from '@/components/pecas/CatalogoPecasPanel';
+import { estoqueBaixo } from '@/lib/estoque';
 
 export default function Pecas() {
   const { company } = useCompany();
@@ -38,12 +39,12 @@ export default function Pecas() {
     const matchSearch = p.description?.toLowerCase().includes(search.toLowerCase()) ||
       p.sku?.toLowerCase().includes(search.toLowerCase()) ||
       p.internal_code?.toLowerCase().includes(search.toLowerCase());
-    if (tab === 'low') return matchSearch && (p.stock_quantity || 0) <= (p.min_stock || 1);
+    if (tab === 'low') return matchSearch && estoqueBaixo(p);
     if (tab === 'inactive') return matchSearch && !p.is_active;
     return matchSearch && p.is_active !== false;
   });
 
-  const lowStockCount = parts.filter(p => (p.stock_quantity || 0) <= (p.min_stock || 1)).length;
+  const lowStockCount = parts.filter(estoqueBaixo).length;
 
   return (
     <div className="p-4 lg:p-6 pb-20 lg:pb-6">
@@ -89,7 +90,7 @@ export default function Pecas() {
         ) : (
           <div className="space-y-2">
             {filtered.map(part => {
-              const isLow = (part.stock_quantity || 0) <= (part.min_stock || 1);
+              const isLow = estoqueBaixo(part);
               return (
                 <Card key={part.id} className="cursor-pointer hover:shadow-sm transition-shadow"
                   onClick={() => navigate(`/pecas/${part.id}`)}>

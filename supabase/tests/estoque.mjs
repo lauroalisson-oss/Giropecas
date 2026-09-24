@@ -5,7 +5,11 @@
 // peças sem olhar o que foi movimentado é o que fazia a exclusão de uma
 // OS nunca paga INVENTAR peças no estoque.
 
-import { saldoADevolver, temBaixaDeEstoque, faltaEmEstoque, avisoFaltaEmEstoque, devolucaoDeEstoque } from '/home/user/Giropecas/src/lib/estoque.js';
+import {
+  saldoADevolver, temBaixaDeEstoque, faltaEmEstoque, avisoFaltaEmEstoque, devolucaoDeEstoque,
+  estoqueMinimo, estoqueBaixo, efeitoNoSaldo, saldoPelosMovimentos, ajusteDeEstoque, movimentoSaldoInicial,
+} from '/home/user/Giropecas/src/lib/estoque.js';
+import { readFileSync } from 'node:fs';
 
 let f = 0;
 const ok = (c, m) => { if (!c) { f++; console.log('FAIL:', m); } else console.log('ok:', m); };
@@ -164,6 +168,73 @@ try { devolucaoDeEstoque({ movimentos: saidasOS, referenceId: 'os1', referenceTy
 ok(barrou, "'estorno' e recusado aqui, antes de chegar ao banco");
 ok(devolucaoDeEstoque({ movimentos: saidasOS, referenceId: 'os1', referenceType: 'work_order' })[0].movimento.previous_stock === 0,
   'sem estoque atual informado, parte de zero em vez de NaN');
+
+
+{ // escopo proprio
+console.log('--- Ajuste manual: a contagem fisica manda ---');
+const peca = { id: 'p1', stock_quantity: 10 };
+// Estoque ATUAL no banco e 8: saiu uma venda de 2 depois que a tela abriu.
+const aj = ajusteDeEstoque({ peca, atual: 8, contado: '5', motivo: 'Contagem', companyId: 'c1' });
+ok(aj.novoEstoque === 5, 'o estoque passa a ser o contado');
+ok(aj.diferenca === -3, `a diferenca e contra o estoque ATUAL: 5 - 8 = -3 (deu ${aj.diferenca})`);
+ok(aj.movimento.previous_stock === 8, 'antes = o do banco, nao o 10 da tela velha');
+ok(aj.movimento.quantity === 3 && aj.movimento.type === 'ajuste', 'movimento de ajuste de 3');
+ok(aj.movimento.reference_type === 'manual', 'reference_type aceito pelo banco');
+
+ok(ajusteDeEstoque({ peca, atual: 8, contado: '', motivo: 'x' }).erro, 'campo vazio NAO zera o estoque');
+ok(/Informe a quantidade/.test(ajusteDeEstoque({ peca, atual: 8, contado: '  ', motivo: 'x' }).erro), 'so espacos tambem nao');
+ok(ajusteDeEstoque({ peca, atual: 8, contado: 'abc', motivo: 'x' }).erro, 'texto nao e quantidade');
+ok(ajusteDeEstoque({ peca, atual: 8, contado: '-1', motivo: 'x' }).erro, 'contagem negativa e recusada');
+ok(ajusteDeEstoque({ peca, atual: 8, contado: '5' }).erro, 'sem motivo e recusado');
+ok(/já está em 8/.test(ajusteDeEstoque({ peca, atual: 8, contado: '8', motivo: 'x' }).erro), 'sem diferenca, nada a ajustar');
+ok(ajusteDeEstoque({ peca, atual: 8, contado: '0', motivo: 'Perda total' }).novoEstoque === 0, 'zerar de proposito, com motivo, pode');
+ok(ajusteDeEstoque({ peca, atual: 2, contado: '2,5', motivo: 'Oleo a granel' }).novoEstoque === 2.5, 'aceita virgula decimal (litros)');
+ok(ajusteDeEstoque({ peca: null, atual: 8, contado: '5', motivo: 'x' }).erro, 'peca nula');
+
+console.log('--- O sinal do ajuste ---');
+// Gravava so o modulo. A conferencia contava zero e a tela mostrava "-"
+// ate para o ajuste que ACHOU pecas.
+const paraMais = ajusteDeEstoque({ peca, atual: 8, contado: '12', motivo: 'Achei uma caixa' }).movimento;
+const paraMenos = ajusteDeEstoque({ peca, atual: 8, contado: '5', motivo: 'Perda' }).movimento;
+ok(efeitoNoSaldo(paraMais) === 4, 'ajuste para mais soma');
+ok(efeitoNoSaldo(paraMenos) === -3, 'ajuste para menos subtrai');
+ok(efeitoNoSaldo({ type: 'entrada', quantity: 5 }) === 5, 'entrada soma');
+ok(efeitoNoSaldo({ type: 'devolucao', quantity: 2 }) === 2, 'devolucao soma');
+ok(efeitoNoSaldo({ type: 'saida', quantity: 3 }) === -3, 'saida subtrai');
+ok(efeitoNoSaldo({ type: 'desconhecido', quantity: 3 }) === 0, 'tipo desconhecido nao mexe');
+ok(efeitoNoSaldo(null) === 0, 'nulo');
+
+console.log('--- Saldo inicial vira movimento ---');
+// Peca cadastrada com 10 e vendida em 2: saldo 8, movimentos -2. A
+// conferencia acusava divergencia de 10 em toda peca criada com estoque.
+const nova = { id: 'p9', stock_quantity: 10 };
+const ini = movimentoSaldoInicial({ peca: nova, companyId: 'c1' });
+ok(ini.type === 'entrada' && ini.quantity === 10, 'o saldo inicial e uma entrada');
+ok(ini.previous_stock === 0 && ini.new_stock === 10, 'de 0 para 10');
+ok(movimentoSaldoInicial({ peca: { id: 'x', stock_quantity: 0 } }) === null, 'sem estoque, sem movimento');
+ok(movimentoSaldoInicial({ peca: { stock_quantity: 5 } }) === null, 'sem id, sem movimento');
+
+const historia = [ini, { type: 'saida', quantity: 2 }, paraMenos && { ...paraMenos, previous_stock: 8, new_stock: 5 }];
+ok(saldoPelosMovimentos(historia) === 5, `cadastro 10, venda 2, contagem 5: saldo pelos movimentos = 5 (deu ${saldoPelosMovimentos(historia)})`);
+ok(saldoPelosMovimentos([{ type: 'saida', quantity: 2 }]) === -2, 'sem o saldo inicial, a conta nao fecha — era o bug');
+
+console.log('--- A conferencia SQL faz a mesma conta ---');
+const sql = readFileSync('/home/user/Giropecas/supabase/tests/conferencia.sql', 'utf8');
+ok(/when\s+type\s*=\s*'ajuste'/i.test(sql), 'a conferencia conta o ajuste');
+ok(/new_stock(\s*,\s*0\s*\))?\s*-\s*(coalesce\(\s*)?previous_stock/i.test(sql), 'e tira o sinal do antes/depois, como efeitoNoSaldo');
+
+console.log('--- Estoque minimo ---');
+ok(estoqueMinimo({ min_stock: 0 }) === 0, 'minimo 0 fica 0 (antes virava 1)');
+ok(estoqueMinimo({ min_stock: 5 }) === 5, 'minimo 5');
+ok(estoqueMinimo({ min_stock: '3' }) === 3, 'texto vira numero');
+ok(estoqueMinimo({}) === 1, 'sem minimo definido, 1');
+ok(estoqueMinimo({ min_stock: null }) === 1, 'nulo, 1');
+ok(estoqueMinimo({ min_stock: '' }) === 1, 'vazio, 1');
+ok(estoqueMinimo({ min_stock: -2 }) === 1, 'negativo nao e minimo, 1');
+ok(!estoqueBaixo({ stock_quantity: 0, min_stock: 0 }) === false, 'minimo 0 com estoque 0: ainda e baixo (0 <= 0)');
+ok(!estoqueBaixo({ stock_quantity: 1, min_stock: 0 }), 'minimo 0 com estoque 1: nao alerta (antes alertava)');
+ok(estoqueBaixo({ stock_quantity: 1 }), 'sem minimo, 1 unidade alerta');
+}
 
 console.log(f === 0 ? '\n✅ DEVOLUCAO DE ESTOQUE OK' : `\n❌ ${f} falha(s)`);
 process.exit(f ? 1 : 0);

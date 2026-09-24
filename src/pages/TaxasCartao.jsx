@@ -8,9 +8,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { CreditCard, Save, Trash2, Copy } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import { BANDEIRAS, MAQUINAS } from '@/lib/caixa';
 
-const BRANDS = ['Visa', 'Mastercard', 'Elo', 'Amex', 'Hipercard', 'Banricompras', 'Outras'];
-const MACHINES = ['Geral (todas)', 'Stone', 'Cielo', 'PagSeguro', 'Rede', 'GetNet', 'Mercado Pago', 'InfinitePay'];
+// A mesma lista das telas de pagamento — ver lib/caixa.js.
+const BRANDS = BANDEIRAS;
+const MACHINES = MAQUINAS;
 const MAX_INSTALLMENTS = 21;
 
 function emptyRates() {

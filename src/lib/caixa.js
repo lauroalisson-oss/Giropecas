@@ -35,47 +35,107 @@ export function vendaValida(venda) {
   return !!venda && venda.status !== VENDA_CANCELADA;
 }
 
-// Linha coringa do cadastro de taxas: vale para qualquer maquininha.
-const MAQUINA_GERAL = 'Geral (todas)';
-const BANDEIRA_GERAL = 'Outras';
+// Os nomes do cadastro de taxas. Moram aqui para que o cadastro e as duas
+// telas de pagamento ofereçam a MESMA lista — as telas de pagamento
+// listavam 5 bandeiras e o cadastro 7: um cartão Banricompras não tinha
+// como ser escolhido na hora de cobrar.
+export const MAQUINA_GERAL = 'Geral (todas)';
+export const BANDEIRA_OUTRAS = 'Outras';
+export const BANDEIRAS = ['Visa', 'Mastercard', 'Elo', 'Amex', 'Hipercard', 'Banricompras', BANDEIRA_OUTRAS];
+export const MAQUINAS = [MAQUINA_GERAL, 'Stone', 'Cielo', 'PagSeguro', 'Rede', 'GetNet', 'Mercado Pago', 'InfinitePay'];
+
+const percentualDa = (linha, p) => (p.method === 'cartao_debito'
+  ? Number(linha.debit_rate) || 0
+  : Number(linha.credit_rates?.[String(p.installments || 1)]) || 0);
+
+/**
+ * As linhas do cadastro que PODEM valer para um pagamento.
+ *
+ * A versão anterior escolhia uma linha só, e quando o pagamento não dizia
+ * a bandeira ("Qualquer") ficava com a primeira linha da maquininha — a
+ * ordem do SELECT decidia se a venda pagava 3% (Visa) ou 5% (Amex). E as
+ * telas de pagamento nem deixavam escolher a maquininha: tudo saía como
+ * "Geral (todas)", e a oficina que cadastrou as taxas como "Stone" ficava
+ * com taxa ZERO em toda venda no cartão.
+ *
+ * Agora: a maquininha informada; sem linha para ela, a coringa "Geral
+ * (todas)"; sem coringa, nenhuma (falta cadastrar). Maquininha NÃO
+ * informada: a coringa, ou todas se não houver coringa. Dentro disso, a
+ * bandeira informada; sem ela, "Outras"; sem nenhuma, todas.
+ */
+export function linhasDaTaxa(pagamento, taxas = []) {
+  const p = pagamento || {};
+  const lista = (taxas || []).filter(Boolean);
+  if (!lista.length) return [];
+
+  const informada = p.machine && p.machine !== MAQUINA_GERAL;
+  const daMaquina = informada ? lista.filter(r => r.machine === p.machine) : [];
+  const geral = lista.filter(r => r.machine === MAQUINA_GERAL);
+  // Maquininha informada e sem taxa própria nem coringa: nenhuma linha. Usar
+  // a taxa de OUTRA maquininha seria chutar — a tela avisa que falta
+  // cadastrar. Só quando a maquininha NÃO foi dita é que todas entram.
+  const base = daMaquina.length ? daMaquina : (geral.length ? geral : (informada ? [] : lista));
+  if (!base.length) return [];
+
+  if (p.brand) {
+    // Todas as que casam, não a primeira: sem maquininha informada, a
+    // mesma bandeira aparece uma vez por maquininha — e escolher a primeira
+    // devolvia a decisão à ordem do SELECT.
+    for (const grupo of [base, geral]) {
+      const exata = grupo.filter(r => r.brand === p.brand);
+      if (exata.length) return exata;
+      const outras = grupo.filter(r => r.brand === BANDEIRA_OUTRAS);
+      if (outras.length) return outras;
+    }
+  }
+  return base;
+}
+
+/**
+ * A faixa de percentuais possível para o pagamento. min === max quando não
+ * há dúvida (uma linha só, ou todas com a mesma taxa).
+ */
+export function faixaDaTaxa(pagamento, taxas = []) {
+  const p = pagamento || {};
+  if (!METODOS_CARTAO.includes(p.method)) return { min: 0, max: 0 };
+  const pcts = linhasDaTaxa(p, taxas).map(l => percentualDa(l, p));
+  if (!pcts.length) return { min: 0, max: 0 };
+  return { min: Math.min(...pcts), max: Math.max(...pcts) };
+}
+
+// Quando a taxa depende de algo que o pagamento não disse. A tela mostra
+// e pede a bandeira ou a maquininha.
+export function taxaIncerta(pagamento, taxas = []) {
+  const { min, max } = faixaDaTaxa(pagamento, taxas);
+  return min !== max ? { min, max } : null;
+}
 
 /**
  * A taxa que a maquininha desconta de UM pagamento.
  *
- * A escolha da linha é explícita e vai do mais específico ao mais geral.
- * Nunca cai numa linha qualquer: se nada casa, a taxa é zero e o lojista
- * vê que falta cadastrar — melhor do que cobrar 4,2% da Stone numa venda
- * feita na Cielo porque aquela linha voltou primeiro do banco.
+ * Havendo dúvida, usa a MAIOR taxa possível: melhor o lucro aparecer um
+ * pouco menor, com aviso na tela, do que maior do que foi.
  *
  * @param {object} pagamento  { method, brand, machine, installments, amount }
  * @param {Array}  taxas      linhas de card_rates
  */
 export function taxaDeCartao(pagamento, taxas = []) {
   const p = pagamento || {};
-  if (!METODOS_CARTAO.includes(p.method)) return 0;
+  const { max } = faixaDaTaxa(p, taxas);
+  if (max <= 0) return 0;
+  return reais(Math.round(centavos(p.amount) * max) / 100);
+}
 
-  const lista = (taxas || []).filter(Boolean);
-  const casaMaquina = r => r.machine === p.machine || r.machine === MAQUINA_GERAL;
-  const casaBandeira = r => r.brand === p.brand || r.brand === BANDEIRA_GERAL;
+// A maquininha que o pagamento começa marcando: a única cadastrada, se for
+// uma só; a coringa, se existir; senão nenhuma — e a tela pede.
+export function maquinasCadastradas(taxas = []) {
+  return [...new Set((taxas || []).filter(Boolean).map(r => r.machine).filter(Boolean))];
+}
 
-  const linha =
-    // 1. bandeira e maquininha exatas
-    lista.find(r => r.brand === p.brand && r.machine === p.machine)
-    // 2. a maquininha certa, bandeira coringa (ou pagamento sem bandeira)
-    || lista.find(r => r.machine === p.machine && (casaBandeira(r) || !p.brand))
-    // 3. a bandeira certa na linha coringa de maquininha
-    || lista.find(r => r.machine === MAQUINA_GERAL && casaBandeira(r))
-    // 4. qualquer linha coringa de maquininha
-    || lista.find(casaMaquina);
-
-  if (!linha) return 0;
-
-  const percentual = p.method === 'cartao_debito'
-    ? Number(linha.debit_rate) || 0
-    : Number(linha.credit_rates?.[String(p.installments || 1)]) || 0;
-
-  if (percentual <= 0) return 0;
-  return reais(Math.round(centavos(p.amount) * percentual) / 100);
+export function maquinaPadrao(taxas = []) {
+  const ms = maquinasCadastradas(taxas);
+  if (ms.length === 1) return ms[0];
+  return ms.includes(MAQUINA_GERAL) ? MAQUINA_GERAL : '';
 }
 
 /**

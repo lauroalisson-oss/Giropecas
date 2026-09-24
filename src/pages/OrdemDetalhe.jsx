@@ -21,6 +21,7 @@ import { saldoADevolver, devolucaoDeEstoque } from '@/lib/estoque';
 import { notaAutorizadaDe, motivoNaoExcluir } from '@/lib/nfse-dados';
 import { estornoDaVenda, VENDA_CANCELADA } from '@/lib/caixa';
 import { hoje } from '@/lib/datas';
+import { acoesDaOrdem } from '@/lib/ordens';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import RevisoesVeiculo from '@/components/RevisoesVeiculo';
 
@@ -297,7 +298,9 @@ export default function OrdemDetalhe() {
   if (loading) return <div className="flex justify-center py-20 text-gray-400">Carregando...</div>;
   if (!order) return <div className="p-6 text-gray-500">OS não encontrada.</div>;
 
-  const isActive = order.status !== 'cancelada' && order.status !== 'faturada';
+  // Ver lib/ordens.js: a regra de que botão aparece em que estado.
+  const acoes = acoesDaOrdem(order);
+  const isActive = acoes.podeMudarEstado;
   const canAdvance = STATUS_FLOW.includes(order.status) && order.status !== 'finalizada';
   const nextStatus = STATUS_FLOW[STATUS_FLOW.indexOf(order.status) + 1];
 
@@ -382,6 +385,25 @@ export default function OrdemDetalhe() {
                   className="text-red-600 border-red-200 hover:bg-red-50">Cancelar</Button>
               </div>
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* OS paga: o único caminho para desfazer é cancelar com devolução.
+          O botão "Cancelar" de cima só aparece enquanto a OS não foi paga
+          (isActive), e todo pagamento marca a OS como faturada — então o
+          estorno existia no código mas nenhuma tela chegava até ele. */}
+      {acoes.cancelarDevolveDinheiro && acoes.podeCancelar && !editing && (
+        <Card className="mb-4 border-gray-200">
+          <CardContent className="p-4 flex items-center justify-between flex-wrap gap-3">
+            <p className="text-sm text-gray-600">
+              OS paga. Se o cliente desistir, cancelar registra a devolução do dinheiro
+              e devolve as peças ao estoque.
+            </p>
+            <Button size="sm" variant="outline" onClick={cancelOrder} disabled={updating}
+              className="text-red-600 border-red-200 hover:bg-red-50">
+              Cancelar e devolver ao cliente
+            </Button>
           </CardContent>
         </Card>
       )}

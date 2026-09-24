@@ -7,6 +7,7 @@
 import { emAberto, estaVencido, estaQuitado } from './crediario';
 import { geraComissao } from './comissoes';
 import { hoje as hojeLocal } from './datas';
+import { vendaValida } from './caixa';
 
 const centavos = (v) => Math.round((Number(v) || 0) * 100);
 const reais = (c) => Math.round(c) / 100;
@@ -127,8 +128,11 @@ export function inadimplencia(titulos, hoje = hojeLocal()) {
  * DRE simplificado do período.
  */
 export function dre({ vendas, ordens, pecaPorId, tecnicoPorId }) {
-  const receita = reais((vendas || []).reduce((s, v) => s + centavos(v?.total), 0));
-  const cmv = custoDasVendas(vendas, pecaPorId);
+  // Venda cancelada teve o dinheiro devolvido ao cliente: não é receita, e
+  // a peça voltou ao estoque, então também não é custo.
+  const validas = (vendas || []).filter(vendaValida);
+  const receita = reais(validas.reduce((s, v) => s + centavos(v?.total), 0));
+  const cmv = custoDasVendas(validas, pecaPorId);
   const com = comissoes(ordens, tecnicoPorId);
 
   const lucroBrutoC = centavos(receita) - centavos(cmv.total);

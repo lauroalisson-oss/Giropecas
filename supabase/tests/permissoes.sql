@@ -101,8 +101,38 @@ trava_companies as (
       and not t.tgisinternal)
 ),
 
+-- 8. Os tipos de lançamento que o código grava, aceitos pelo banco.
+--    Espelho de REFERENCIAS_LANCAMENTO em src/lib/caixa.js — mudou lá,
+--    muda aqui. Em 24/09 a comissão passou a gravar 'commission' sem que
+--    a regra aceitasse, e todo pagamento de comissão falhou em produção.
+tipos_lancamento as (
+  select 'lançamento com reference_type = ''' || t || ''' é recusado pelo banco' as achado
+  from unnest(array['sale','payment','purchase','manual','tax','commission','refund']) t
+  where not exists (
+    select 1 from pg_constraint c
+    where c.conname = 'accounting_entries_reference_type_chk'
+      and pg_get_constraintdef(c.oid) like '%''' || t || '''%')
+),
+
+-- 9. O mesmo para movimentos de estoque. Espelho de TIPOS_MOVIMENTO e
+--    REFERENCIAS_MOVIMENTO em src/lib/estoque.js. A devolução gravava
+--    'estorno', recusado aqui — e cada tentativa de cancelar uma OS paga
+--    inflava o estoque sem concluir.
+tipos_movimento as (
+  select 'movimento de estoque com ' || campo || ' = ''' || v || ''' é recusado pelo banco' as achado
+  from (values
+    ('type', 'stock_movements_type_chk', array['entrada','saida','ajuste','devolucao']),
+    ('reference_type', 'stock_movements_reference_type_chk', array['work_order','sale','purchase','manual'])
+  ) as r(campo, regra, valores), unnest(r.valores) v
+  where not exists (
+    select 1 from pg_constraint c
+    where c.conname = r.regra and pg_get_constraintdef(c.oid) like '%''' || v || '''%')
+),
+
 problemas as (
   select achado from funcoes_anon
+  union all select achado from tipos_lancamento
+  union all select achado from tipos_movimento
   union all select achado from porta_antiga
   union all select achado from sem_rls
   union all select achado from sem_politica

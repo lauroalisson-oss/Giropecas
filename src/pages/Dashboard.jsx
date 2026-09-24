@@ -15,6 +15,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import FinancialPanel from '@/components/FinancialPanel';
 import { hoje, diaLocal, diaDoRegistro } from '@/lib/datas';
 import { estaVencido, emAberto } from '@/lib/crediario';
+import { vendaValida } from '@/lib/caixa';
 
 export default function Dashboard() {
   const { company } = useCompany();
@@ -39,7 +40,8 @@ export default function Dashboard() {
         base44.entities.CreditTitle.filter({ company_id: company.id })
       ]);
 
-      const todaySales = sales.filter(s => diaDoRegistro(s.created_date) === today);
+      // Venda cancelada teve o dinheiro devolvido: não é venda de hoje.
+      const todaySales = sales.filter(s => vendaValida(s) && diaDoRegistro(s.created_date) === today);
       const todayTotal = todaySales.reduce((sum, s) => sum + (s.total || 0), 0);
 
       const openOrders = orders.filter(o => ['aberta', 'em_andamento', 'aguardando_peca'].includes(o.status));
@@ -59,7 +61,7 @@ export default function Dashboard() {
         d.setDate(d.getDate() - (6 - i));
         const dateStr = diaLocal(d);
         const dayName = d.toLocaleDateString('pt-BR', { weekday: 'short' });
-        const daySales = sales.filter(s => diaDoRegistro(s.created_date) === dateStr);
+        const daySales = sales.filter(s => vendaValida(s) && diaDoRegistro(s.created_date) === dateStr);
         return { day: dayName, total: daySales.reduce((sum, s) => sum + (s.total || 0), 0) };
       });
 

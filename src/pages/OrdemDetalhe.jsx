@@ -17,8 +17,10 @@ import EmitirNotaButton from '@/components/EmitirNotaButton';
 import EmitirNfseButton from '@/components/EmitirNfseButton';
 import { printDocument } from '@/components/PrintReceipt';
 import { revisoesDaOrdem } from '@/lib/crm';
-import { saldoADevolver } from '@/lib/estoque';
+import { saldoADevolver, devolucaoDeEstoque } from '@/lib/estoque';
 import { notaAutorizadaDe, motivoNaoExcluir } from '@/lib/nfse-dados';
+import { estornoDaVenda, VENDA_CANCELADA } from '@/lib/caixa';
+import { hoje } from '@/lib/datas';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import RevisoesVeiculo from '@/components/RevisoesVeiculo';
 
@@ -206,35 +208,76 @@ export default function OrdemDetalhe() {
       return;
     }
 
-    if (!confirm('Cancelar esta OS?')) return;
+    // OS paga: o lojista devolve o dinheiro ao cliente. O estorno sai do
+    // que ENTROU de verdade (fechamento + parcelas já pagas), e é mostrado
+    // antes de confirmar — quem cancela precisa saber quanto vai devolver.
+    let venda = null;
+    let titulos = [];
+    let estorno = { valor: 0, lancamentos: [], titulosACancelar: [] };
+    if (order?.sale_id) {
+      venda = await base44.entities.Sale.get(order.sale_id).catch(() => null);
+      if (venda) {
+        titulos = await base44.entities.CreditTitle.filter({ company_id: company.id, sale_id: venda.id })
+          .catch(() => []);
+        const daVenda = await base44.entities.AccountingEntry.filter({ company_id: company.id, reference_id: venda.id })
+          .catch(() => []);
+        const dasParcelas = (await Promise.all(titulos.map(t =>
+          base44.entities.AccountingEntry.filter({ company_id: company.id, reference_id: t.id }).catch(() => []),
+        ))).flat();
+        estorno = estornoDaVenda({
+          venda, titulos, lancamentos: [...daVenda, ...dasParcelas],
+          data: hoje(), descricao: `OS #${order.order_number || ''}`, companyId: company.id,
+        });
+      }
+    }
+
+    const aviso = estorno.valor > 0
+      ? `Cancelar esta OS?\n\nO cliente recebe ${formatCurrency(estorno.valor)} de volta. `
+        + 'A saída é lançada no caixa hoje.'
+        + (estorno.titulosACancelar.length ? `\n${estorno.titulosACancelar.length} parcela(s) em aberto serão canceladas.` : '')
+      : 'Cancelar esta OS?';
+    if (!confirm(aviso)) return;
     setUpdating(true);
     try {
+      // Dinheiro primeiro, status por último: se algo falhar no meio, a OS
+      // continua como estava e cancelar de novo não devolve duas vezes (o
+      // estorno desconta o que já foi devolvido).
+      for (const l of estorno.lancamentos) await base44.entities.AccountingEntry.create(l);
+      for (const tid of estorno.titulosACancelar) {
+        await base44.entities.CreditTitle.update(tid, { status: 'cancelado' });
+      }
+      if (venda && venda.status !== VENDA_CANCELADA) {
+        await base44.entities.Sale.update(venda.id, { status: VENDA_CANCELADA });
+      }
+
       // Se a OS já foi paga, as peças saíram da prateleira. Cancelar sem
       // devolvê-las deixaria o estoque do sistema menor que o real, e a
       // oficina compraria peça que já tem.
+      // Movimento primeiro, saldo depois — ver devolucaoDeEstoque.
       const movimentos = await base44.entities.StockMovement.filter({ reference_id: id });
-      const pendentes = saldoADevolver(movimentos);
-
-      for (const item of pendentes) {
-        const part = await base44.entities.Part.get(item.part_id);
-        const novo = (part.stock_quantity || 0) + item.quantity;
-        await base44.entities.Part.update(item.part_id, { stock_quantity: novo });
-        await base44.entities.StockMovement.create({
-          company_id: company.id, part_id: item.part_id, type: 'devolucao',
-          quantity: item.quantity, reason: `Cancelamento da OS #${order.order_number || ''}`,
-          reference_id: id, reference_type: 'estorno',
-          previous_stock: part.stock_quantity, new_stock: novo,
-        });
+      const estoqueAtual = {};
+      for (const { part_id } of saldoADevolver(movimentos)) {
+        const part = await base44.entities.Part.get(part_id);
+        estoqueAtual[part_id] = part?.stock_quantity || 0;
+      }
+      const pendentes = devolucaoDeEstoque({
+        movimentos, estoqueAtual, referenceId: id, referenceType: 'work_order',
+        motivo: `Cancelamento da OS #${order.order_number || ''}`, companyId: company.id,
+      });
+      for (const passo of pendentes) {
+        await base44.entities.StockMovement.create(passo.movimento);
+        await base44.entities.Part.update(passo.part_id, { stock_quantity: passo.novoEstoque });
       }
 
       await base44.entities.WorkOrder.update(id, { status: 'cancelada' });
       setOrder(prev => ({ ...prev, status: 'cancelada' }));
-      toast({
-        title: 'OS cancelada',
-        description: pendentes.length > 0
+      const partes = [
+        estorno.valor > 0 ? `${formatCurrency(estorno.valor)} lançados como devolução ao cliente.` : null,
+        pendentes.length > 0
           ? `${pendentes.length} peça(s) devolvida(s) ao estoque.`
           : 'Nenhuma peça a devolver — esta OS não tinha baixado estoque.',
-      });
+      ].filter(Boolean);
+      toast({ title: 'OS cancelada', description: partes.join(' ') });
     } catch (e) {
       toast({ title: 'Erro ao cancelar', description: e.message, variant: 'destructive' });
     } finally {

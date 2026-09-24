@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { Download, TrendingUp, Users, Wrench, Package } from 'lucide-react';
+import { vendaValida } from '@/lib/caixa';
 
 const COLORS = ['#dc2626', '#1a1a1a', '#6b7280', '#f97316', '#22c55e', '#3b82f6'];
 
@@ -43,7 +44,8 @@ export default function RelatoriosGerenciais() {
     return true;
   };
 
-  const fSales = data.sales.filter(s => pf(s.created_date));
+  // Venda cancelada teve o dinheiro devolvido: fora de todo indicador.
+  const fSales = data.sales.filter(s => vendaValida(s) && pf(s.created_date));
   const fOrders = data.orders.filter(o => pf(o.created_date));
 
   const pecaPorId = Object.fromEntries(data.parts.map(p => [p.id, p]));

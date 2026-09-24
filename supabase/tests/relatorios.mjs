@@ -152,5 +152,18 @@ ok(r.cmvEstimado === false, 'CMV exato: todo item tinha custo');
 const vazio = dre({ vendas: [], ordens: [], pecaPorId: {}, tecnicoPorId: {} });
 ok(vazio.receita === 0 && vazio.margemBruta === 0, 'periodo sem venda nao divide por zero');
 
+
+console.log('--- DRE: venda cancelada fica de fora ---');
+// OS paga e cancelada: o dinheiro voltou ao cliente e a peca ao estoque.
+const comCancelada = dre({
+  vendas: [
+    { total: 1000, status: 'pago', items: [{ type: 'part', part_id: 'oleo', quantity: 10, cost_price: 30 }] },
+    { total: 700, status: 'cancelado', items: [{ type: 'part', part_id: 'oleo', quantity: 5, cost_price: 30 }] },
+  ],
+  ordens: [], pecaPorId: pecas, tecnicoPorId: tecnicos,
+});
+ok(comCancelada.receita === 1000, `receita ignora a cancelada (deu ${comCancelada.receita})`);
+ok(comCancelada.cmv === 300, 'e o custo dela tambem — a peca voltou ao estoque');
+
 console.log(f === 0 ? '\n✅ RELATORIOS GERENCIAIS OK' : `\n❌ ${f} falha(s)`);
 process.exit(f ? 1 : 0);

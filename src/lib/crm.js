@@ -7,6 +7,8 @@
 // Crediário: só libera com CPF e data de nascimento.
 // ---------------------------------------------------------------------------
 
+import { vendaValida } from './caixa';
+
 const digitos = (s) => String(s ?? '').replace(/\D/g, '');
 
 // Valida CPF pelos dígitos verificadores. Impede o crediário de ser liberado
@@ -95,7 +97,9 @@ export function faixaCliente(pontos) {
 // Consolida vendas e ordens de serviço num resumo por cliente.
 export function resumoClientes({ clientes = [], vendas = [], ordens = [], hoje = new Date() }) {
   return clientes.map(c => {
-    const vs = vendas.filter(v => v.customer_id === c.id);
+    // Venda cancelada não conta para a pontuação: o cliente recebeu o
+    // dinheiro de volta.
+    const vs = vendas.filter(v => v.customer_id === c.id && vendaValida(v));
     const os = ordens.filter(o => o.customer_id === c.id);
 
     const totalGasto =

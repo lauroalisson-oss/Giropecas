@@ -87,3 +87,54 @@ export function avisoFaltaEmEstoque(faltas) {
   return `O estoque ficou negativo em ${faltas.length} peça(s): ${lista}. `
     + 'Confira a contagem — a baixa foi registrada como aconteceu.';
 }
+
+// Os tipos que o banco aceita num movimento de estoque — espelho das regras
+// stock_movements_type_chk e stock_movements_reference_type_chk. Conferidos
+// contra as migrações pela suíte lancamentos.mjs.
+export const TIPOS_MOVIMENTO = ['entrada', 'saida', 'ajuste', 'devolucao'];
+export const REFERENCIAS_MOVIMENTO = ['work_order', 'sale', 'purchase', 'manual'];
+
+/**
+ * A devolução ao estoque do que saiu por conta de uma OS ou venda.
+ *
+ * Existia duas vezes — no cancelamento da OS e na exclusão do Histórico —
+ * e as duas gravavam reference_type = 'estorno', que o banco NÃO aceita.
+ * Pior, somavam a peça no estoque ANTES de gravar o movimento: o movimento
+ * era recusado, a operação falhava, e o estoque já tinha subido. Tentar de
+ * novo somava outra vez, porque a devolução nunca ficava registrada. Cada
+ * tentativa de cancelar uma OS paga inflava o estoque, e o cancelamento
+ * nunca concluía.
+ *
+ * Aqui o tipo é o mesmo da saída — o id aponta para uma OS ou uma venda, e
+ * o reference_type diz qual. Que é devolução, quem diz é o type.
+ *
+ * Devolve os passos na ORDEM de gravação: movimento primeiro, saldo
+ * depois. O movimento é o registro; o saldo na peça é derivado dele. Se o
+ * saldo falhar, a conferência acha a diferença — o contrário não deixava
+ * rastro nenhum.
+ *
+ * @param {object} p
+ * @param {Array}  p.movimentos     movimentos já gravados com este reference_id
+ * @param {object} p.estoqueAtual   { part_id: quantidade atual }
+ * @param {string} p.referenceId    id da OS ou da venda
+ * @param {'work_order'|'sale'} p.referenceType
+ */
+export function devolucaoDeEstoque({ movimentos, estoqueAtual = {}, referenceId, referenceType, motivo, companyId }) {
+  if (!REFERENCIAS_MOVIMENTO.includes(referenceType)) {
+    throw new Error(`Tipo de referência inválido para movimento de estoque: ${referenceType}`);
+  }
+  return saldoADevolver(movimentos).map(({ part_id, quantity }) => {
+    const antes = Number(estoqueAtual[part_id]) || 0;
+    const depois = antes + quantity;
+    return {
+      part_id,
+      quantity,
+      movimento: {
+        company_id: companyId, part_id, type: 'devolucao', quantity, reason: motivo,
+        reference_id: referenceId, reference_type: referenceType,
+        previous_stock: antes, new_stock: depois,
+      },
+      novoEstoque: depois,
+    };
+  });
+}

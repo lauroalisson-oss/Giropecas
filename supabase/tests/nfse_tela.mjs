@@ -4,7 +4,7 @@
 // contasse diferente, o lojista veria folga onde a emissão já está barrada
 // — e descobriria só na hora de emitir para o cliente.
 
-import { pendenciasNfse, nfseNoMes, idDpsDaNota, escolherXml } from '/home/user/Giropecas/src/lib/nfse-dados.js';
+import { pendenciasNfse, nfseNoMes, idDpsDaNota, escolherXml, notaAutorizadaDe, motivoNaoExcluir } from '/home/user/Giropecas/src/lib/nfse-dados.js';
 import { montarDps } from '/home/user/Giropecas/api/_lib/nfse-dps.js';
 
 let f = 0;
@@ -118,6 +118,45 @@ ok(escolherXml(emAndamento).nome === 'DPS-7.xml', 'e avisa no nome que e a DPS')
 recusa(() => escolherXml({ id: 'n3', xml_content: '<NFSe/>' }, 'dps'), 'pedir DPS de nota sem DPS');
 recusa(() => escolherXml({ id: 'n4' }), 'nota sem documento nenhum');
 recusa(() => escolherXml(null), 'nota nula');
+
+
+console.log('--- Excluir ou cancelar documento com nota autorizada ---');
+// Excluir a OS nao cancela a nota: ela continuaria valendo no governo, o
+// ISS continuaria devido, e o registro apontaria para uma OS inexistente.
+const notasDoc = [
+  { id: 'a', work_order_id: 'os1', status: 'autorizada', number: '42' },
+  { id: 'b', work_order_id: 'os2', status: 'cancelada', number: '43' },
+  { id: 'c', work_order_id: 'os3', status: 'rejeitada' },
+  { id: 'd', sale_id: 'v1', status: 'autorizada', number: '7' },
+];
+ok(notaAutorizadaDe(notasDoc, { workOrderId: 'os1' })?.id === 'a', 'OS com nota autorizada e barrada');
+ok(notaAutorizadaDe(notasDoc, { workOrderId: 'os2' }) === null, 'nota ja cancelada libera');
+ok(notaAutorizadaDe(notasDoc, { workOrderId: 'os3' }) === null, 'nota rejeitada nunca valeu: libera');
+ok(notaAutorizadaDe(notasDoc, { workOrderId: 'os9' }) === null, 'OS sem nota libera');
+ok(notaAutorizadaDe(notasDoc, { saleId: 'v1' })?.id === 'd', 'venda com nota autorizada e barrada');
+ok(notaAutorizadaDe(notasDoc, { workOrderId: 'osX', saleId: 'v1' })?.id === 'd',
+  'basta um dos dois vinculos ter nota');
+
+// A mais recente nao pode esconder uma autorizada mais antiga.
+const reemitida = [
+  { work_order_id: 'os5', status: 'rejeitada', created_date: '2026-09-20' },
+  { work_order_id: 'os5', status: 'autorizada', created_date: '2026-09-10', number: '50' },
+];
+ok(notaAutorizadaDe(reemitida, { workOrderId: 'os5' })?.number === '50',
+  'olha todas as notas, nao so a ultima');
+
+ok(notaAutorizadaDe(notasDoc, {}) === null, 'sem vinculo, nada a barrar');
+ok(notaAutorizadaDe(null, { workOrderId: 'os1' }) === null, 'lista nula');
+ok(notaAutorizadaDe([null, notasDoc[0]], { workOrderId: 'os1' })?.id === 'a', 'item nulo no meio');
+// Nota de OUTRA OS com mesmo sale_id nulo nao pode casar por acidente.
+ok(notaAutorizadaDe([{ work_order_id: 'os1', sale_id: null, status: 'autorizada' }], { workOrderId: 'os2', saleId: null }) === null,
+  'vinculo nulo nao casa com vinculo nulo');
+
+const msg = motivoNaoExcluir(notasDoc[0]);
+ok(/42/.test(msg), 'a mensagem diz o numero da nota');
+ok(/Cancele a nota/.test(msg), 'e diz o que fazer');
+ok(/imposto/.test(msg), 'e explica a consequencia');
+ok(motivoNaoExcluir(null) === null, 'sem nota, sem mensagem');
 
 console.log(f === 0 ? '\n✅ TELA DE NOTAS OK' : `\n❌ ${f} falha(s)`);
 process.exit(f ? 1 : 0);

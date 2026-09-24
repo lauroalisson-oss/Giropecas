@@ -17,6 +17,7 @@ import { printDocument } from '@/components/PrintReceipt';
 import { revisoesDaOrdem } from '@/lib/crm';
 import { saldoADevolver } from '@/lib/estoque';
 import { resumoCrediario } from '@/lib/crediario';
+import { notaAutorizadaDe, motivoNaoExcluir } from '@/lib/nfse-dados';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import EmitirNotaButton from '@/components/EmitirNotaButton';
 import EmitirNfseButton from '@/components/EmitirNfseButton';
@@ -208,8 +209,11 @@ export default function Historico() {
   const impactoDaExclusao = (tipo, item) => {
     if (!item) return null;
     const saleId = tipo === 'order' ? item.sale_id : item.id;
+    const workOrderId = tipo === 'order' ? item.id : item.work_order_id;
     const pago = tipo === 'order' ? !!item.sale_id : true;
     return {
+      // Nota autorizada trava a exclusão: ver lib/nfse-dados.js.
+      notaAutorizada: notaAutorizadaDe(nfes, { workOrderId, saleId }),
       // A baixa de estoque só acontece no pagamento.
       devolveEstoque: pago
         && (tipo === 'order'
@@ -254,6 +258,11 @@ export default function Historico() {
 
   const handleDeleteOrder = async () => {
     const order = confirmDelete.item;
+    const nota = impactoDaExclusao('order', order)?.notaAutorizada;
+    if (nota) {
+      toast({ title: 'Não é possível excluir', description: motivoNaoExcluir(nota), variant: 'destructive' });
+      return;
+    }
     setDeleting(true);
     try {
       // A baixa da OS é gravada com o id da própria OS.
@@ -285,6 +294,11 @@ export default function Historico() {
 
   const handleDeleteSale = async () => {
     const sale = confirmDelete.item;
+    const nota = impactoDaExclusao('sale', sale)?.notaAutorizada;
+    if (nota) {
+      toast({ title: 'Não é possível excluir', description: motivoNaoExcluir(nota), variant: 'destructive' });
+      return;
+    }
     setDeleting(true);
     try {
       // A baixa do PDV é gravada com o id da venda; a baixa vinda de uma
@@ -660,6 +674,12 @@ export default function Historico() {
                 const impacto = impactoDaExclusao(confirmDelete.type, confirmDelete.item);
                 return (
                   <>
+                    {impacto?.notaAutorizada && (
+                      <div className="bg-red-50 border border-red-300 rounded-lg p-3 text-xs text-red-800">
+                        <p className="font-semibold">🚫 Exclusão bloqueada</p>
+                        <p className="mt-1">{motivoNaoExcluir(impacto.notaAutorizada)}</p>
+                      </div>
+                    )}
                     {impacto?.devolveEstoque && (
                       <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
                         <strong>As peças baixadas voltam ao estoque.</strong> Peças lançadas
@@ -694,7 +714,7 @@ export default function Historico() {
                 </Button>
                 <Button
                   onClick={confirmDelete.type === 'order' ? handleDeleteOrder : handleDeleteSale}
-                  disabled={deleting}
+                  disabled={deleting || !!impactoDaExclusao(confirmDelete.type, confirmDelete.item)?.notaAutorizada}
                   className="flex-1 bg-red-600 hover:bg-red-700 text-white"
                 >
                   {deleting ? 'Excluindo...' : 'Excluir'}

@@ -18,6 +18,7 @@ import EmitirNfseButton from '@/components/EmitirNfseButton';
 import { printDocument } from '@/components/PrintReceipt';
 import { revisoesDaOrdem } from '@/lib/crm';
 import { saldoADevolver } from '@/lib/estoque';
+import { notaAutorizadaDe, motivoNaoExcluir } from '@/lib/nfse-dados';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import RevisoesVeiculo from '@/components/RevisoesVeiculo';
 
@@ -193,6 +194,18 @@ export default function OrdemDetalhe() {
   };
 
   const cancelOrder = async () => {
+    // Cancelar a OS não cancela a nota: com NFS-e autorizada, o governo
+    // continuaria considerando o serviço prestado e o ISS devido, enquanto
+    // o sistema diria que ele não aconteceu. Busca na hora — a tela não
+    // carrega as notas, e a trava não pode depender de ter carregado.
+    const notas = await base44.entities.NFeRecord.filter({ company_id: company.id, work_order_id: id })
+      .catch(() => []);
+    const nota = notaAutorizadaDe(notas, { workOrderId: id, saleId: order?.sale_id });
+    if (nota) {
+      toast({ title: 'Não é possível cancelar', description: motivoNaoExcluir(nota), variant: 'destructive' });
+      return;
+    }
+
     if (!confirm('Cancelar esta OS?')) return;
     setUpdating(true);
     try {

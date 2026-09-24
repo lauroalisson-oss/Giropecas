@@ -11,6 +11,7 @@ import { Download, TrendingUp, TrendingDown, Package, ClipboardList } from 'luci
 import FluxoCaixaTab from '@/components/relatorios/FluxoCaixaTab';
 import RelatoriosGerenciais from '@/components/relatorios/RelatoriosGerenciais';
 import { diaLocal, diaDoRegistro } from '@/lib/datas';
+import { vendaValida } from '@/lib/caixa';
 
 const COLORS = ['#dc2626', '#1a1a1a', '#6b7280', '#f97316', '#22c55e'];
 
@@ -51,7 +52,8 @@ export default function Relatorios() {
     return true;
   };
 
-  const filteredSales = data.sales.filter(s => periodFilter(s.created_date));
+  // Venda cancelada teve o dinheiro devolvido: não é faturamento.
+  const filteredSales = data.sales.filter(s => vendaValida(s) && periodFilter(s.created_date));
   const totalRevenue = filteredSales.reduce((s, x) => s + (x.total || 0), 0);
   const totalOrders = data.orders.filter(o => periodFilter(o.created_date)).length;
   const avgTicket = filteredSales.length > 0 ? totalRevenue / filteredSales.length : 0;
@@ -68,7 +70,7 @@ export default function Relatorios() {
   const dailySales = Array.from({ length: 30 }, (_, i) => {
     const d = new Date(); d.setDate(d.getDate() - (29 - i));
     const dateStr = diaLocal(d);
-    const daySales = data.sales.filter(s => diaDoRegistro(s.created_date) === dateStr);
+    const daySales = data.sales.filter(s => vendaValida(s) && diaDoRegistro(s.created_date) === dateStr);
     return { day: d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }), total: daySales.reduce((s, x) => s + (x.total || 0), 0) };
   });
 

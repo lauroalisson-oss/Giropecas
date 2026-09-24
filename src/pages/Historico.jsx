@@ -15,7 +15,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useToast } from '@/components/ui/use-toast';
 import { printDocument } from '@/components/PrintReceipt';
 import { revisoesDaOrdem } from '@/lib/crm';
-import { saldoADevolver } from '@/lib/estoque';
+import { saldoADevolver, devolucaoDeEstoque } from '@/lib/estoque';
 import { resumoCrediario } from '@/lib/crediario';
 import { notaAutorizadaDe, motivoNaoExcluir } from '@/lib/nfse-dados';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -235,23 +235,27 @@ export default function Historico() {
   // Agora a conta sai dos movimentos gravados: saídas menos devoluções
   // já feitas. Assim funciona para qualquer caminho e não devolve duas
   // vezes se a operação for repetida.
-  const restoreStock = async (referenceId, motivo) => {
+  const restoreStock = async (referenceId, referenceType, motivo) => {
     const movimentos = await base44.entities.StockMovement.filter({ reference_id: referenceId });
-    const pendentes = saldoADevolver(movimentos);
 
-    for (const item of pendentes) {
-      const part = parts.find(p => p.id === item.part_id);
-      if (!part) continue;
-      const newStock = (part.stock_quantity || 0) + item.quantity;
-      await base44.entities.Part.update(item.part_id, { stock_quantity: newStock });
-      await base44.entities.StockMovement.create({
-        company_id: company.id, part_id: item.part_id, type: 'devolucao',
-        quantity: item.quantity, reason: motivo,
-        // Sem o reference_id a devolução não se liga à baixa, e a conta
-        // de "quanto ainda falta devolver" nunca fecharia.
-        reference_id: referenceId, reference_type: 'estorno',
-        previous_stock: part.stock_quantity, new_stock: newStock,
-      });
+    // O saldo atual vem do banco, não da lista carregada quando a tela
+    // abriu: outra operação pode ter mexido na peça desde então, e gravar
+    // em cima de um número velho apagaria aquela mudança.
+    const estoqueAtual = {};
+    for (const { part_id } of saldoADevolver(movimentos)) {
+      const part = await base44.entities.Part.get(part_id).catch(() => null);
+      if (part) estoqueAtual[part_id] = part.stock_quantity || 0;
+    }
+
+    // Peça que não existe mais no cadastro fica de fora: não há onde somar.
+    const pendentes = devolucaoDeEstoque({
+      movimentos, estoqueAtual, referenceId, referenceType, motivo, companyId: company.id,
+    }).filter(p => p.part_id in estoqueAtual);
+
+    // Movimento primeiro, saldo depois — ver devolucaoDeEstoque.
+    for (const passo of pendentes) {
+      await base44.entities.StockMovement.create(passo.movimento);
+      await base44.entities.Part.update(passo.part_id, { stock_quantity: passo.novoEstoque });
     }
     return pendentes.length;
   };
@@ -266,7 +270,7 @@ export default function Historico() {
     setDeleting(true);
     try {
       // A baixa da OS é gravada com o id da própria OS.
-      const devolvidas = await restoreStock(order.id, `Exclusão da OS #${order.order_number || ''}`);
+      const devolvidas = await restoreStock(order.id, 'work_order', `Exclusão da OS #${order.order_number || ''}`);
 
       if (order.sale_id) {
         const sale = osSales.find(s => s.id === order.sale_id);
@@ -303,8 +307,8 @@ export default function Historico() {
     try {
       // A baixa do PDV é gravada com o id da venda; a baixa vinda de uma
       // OS usa o id da OS, então as duas são procuradas.
-      const devolvidas = (await restoreStock(sale.id, 'Exclusão de venda'))
-        + (sale.work_order_id ? await restoreStock(sale.work_order_id, 'Exclusão de venda da OS') : 0);
+      const devolvidas = (await restoreStock(sale.id, 'sale', 'Exclusão de venda'))
+        + (sale.work_order_id ? await restoreStock(sale.work_order_id, 'work_order', 'Exclusão de venda da OS') : 0);
 
       await base44.entities.CreditTitle.deleteMany({ sale_id: sale.id });
       await base44.entities.AccountingEntry.deleteMany({ reference_id: sale.id });

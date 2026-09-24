@@ -7,6 +7,7 @@
 
 import {
   dividirPagamento, lancamentosDaVenda, taxaDeCartao, totalDeTaxas,
+  estornoDaVenda, vendaValida,
 } from '/home/user/Giropecas/src/lib/caixa.js';
 
 let f = 0;
@@ -186,6 +187,85 @@ ok(vendaComTaxa.lancamentos.length === 2, 'um credito da venda e um debito da ta
 const debitoTaxa = vendaComTaxa.lancamentos.find(l => l.type === 'debit');
 ok(debitoTaxa && debitoTaxa.amount === 18, 'o debito e a taxa somada');
 ok(debitoTaxa.category === 'Taxas de Cartão', 'lancada na categoria propria');
+
+
+console.log('--- Estorno: OS paga e cancelada, dinheiro devolvido ---');
+// O lojista devolve ao cliente o que ele pagou. E uma SAIDA na data do
+// cancelamento; a entrada original fica, porque aconteceu num mes que pode
+// ja estar fechado.
+const vendaE = { id: 'v1', total: 1000, status: 'pago' };
+const credito = (valor, extra) => ({ type: 'credit', reference_type: 'sale', reference_id: 'v1', amount: valor, ...extra });
+
+const simples = estornoDaVenda({
+  venda: vendaE, lancamentos: [credito(1000)], data: '2026-09-25', descricao: 'OS #7', companyId: 'c1',
+});
+ok(simples.valor === 1000, 'devolve o que entrou');
+ok(simples.lancamentos.length === 1, 'um lancamento de saida');
+const saidaE = simples.lancamentos[0];
+ok(saidaE.type === 'debit', 'e saida');
+ok(saidaE.reference_type === 'refund' && saidaE.reference_id === 'v1', 'aponta para a venda como estorno');
+ok(saidaE.date === '2026-09-25', 'na data do CANCELAMENTO, nao na da venda');
+ok(/OS #7/.test(saidaE.description), 'a descricao diz qual OS');
+
+// A taxa de cartao nao volta: a maquininha nao a devolve.
+const comTaxaE = estornoDaVenda({
+  venda: vendaE,
+  lancamentos: [credito(1000), { type: 'debit', reference_type: 'sale', reference_id: 'v1', amount: 30, category: 'Taxas de Cartão' }],
+  data: '2026-09-25',
+});
+ok(comTaxaE.valor === 1000, 'devolve o valor cheio ao cliente; a taxa continua custo');
+ok(comTaxaE.lancamentos.length === 1, 'nao estorna o debito da taxa');
+
+console.log('--- Estorno: crediario ---');
+// Venda de 1000: entrada 200, 4 parcelas de 200, duas ja pagas.
+const titulosE = [
+  { id: 'p1', total_amount: 200, paid_amount: 200, status: 'pago' },
+  { id: 'p2', total_amount: 200, paid_amount: 200, status: 'pago' },
+  { id: 'p3', total_amount: 200, paid_amount: 0, status: 'a_vencer' },
+  { id: 'p4', total_amount: 200, paid_amount: 50, status: 'pago_parcial' },
+];
+const pgto = (tid, v) => ({ type: 'credit', reference_type: 'payment', reference_id: tid, amount: v });
+const cred = estornoDaVenda({
+  venda: vendaE, titulos: titulosE,
+  lancamentos: [credito(200), pgto('p1', 200), pgto('p2', 200), pgto('p4', 50)],
+  data: '2026-09-25',
+});
+ok(cred.valor === 650, `devolve entrada + parcelas pagas: 200 + 200 + 200 + 50 (deu ${cred.valor})`);
+ok(cred.titulosACancelar.join() === 'p3,p4', 'cancela as parcelas ainda em aberto, inclusive a parcial');
+ok(!cred.titulosACancelar.includes('p1'), 'parcela quitada fica como esta — o historico e dela');
+
+// Recebimento de OUTRA parcela, de outra venda, nao entra na conta.
+const alheio = estornoDaVenda({
+  venda: vendaE, titulos: titulosE, lancamentos: [credito(200), pgto('outra', 999)], data: '2026-09-25',
+});
+ok(alheio.valor === 200, 'pagamento de parcela de outra venda nao e devolvido');
+
+console.log('--- Estorno: cancelar duas vezes nao devolve duas vezes ---');
+const ja = estornoDaVenda({
+  venda: vendaE,
+  lancamentos: [credito(1000), { type: 'debit', reference_type: 'refund', reference_id: 'v1', amount: 1000 }],
+  data: '2026-09-26',
+});
+ok(ja.valor === 0 && ja.lancamentos.length === 0, 'ja estornado: nada a lancar');
+
+const meio = estornoDaVenda({
+  venda: vendaE,
+  lancamentos: [credito(1000), { type: 'debit', reference_type: 'refund', reference_id: 'v1', amount: 400 }],
+  data: '2026-09-26',
+});
+ok(meio.valor === 600, 'estorno parcial anterior: devolve so o que falta');
+
+console.log('--- Estorno: bordas ---');
+ok(estornoDaVenda({ venda: null }).valor === 0, 'sem venda, nada');
+ok(estornoDaVenda({ venda: vendaE, lancamentos: [] }).lancamentos.length === 0, 'venda sem entrada no caixa, nada a devolver');
+ok(estornoDaVenda({ venda: vendaE, lancamentos: [null, credito(10)] }).valor === 10, 'item nulo no meio');
+ok(estornoDaVenda({ venda: vendaE, lancamentos: [credito(33.33), credito(0.01)] }).valor === 33.34, 'centavos exatos');
+
+console.log('--- Venda cancelada nao e receita ---');
+ok(vendaValida({ status: 'pago' }), 'venda paga vale');
+ok(vendaValida({ status: 'pendente' }), 'pendente vale');
+ok(!vendaValida({ status: 'cancelado' }), 'cancelada nao vale');
+ok(!vendaValida(null), 'nula nao vale');
 
 console.log(f === 0 ? '\n✅ CAIXA OK' : `\n❌ ${f} falha(s)`);
 process.exit(f ? 1 : 0);

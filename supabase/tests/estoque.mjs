@@ -5,7 +5,7 @@
 // peças sem olhar o que foi movimentado é o que fazia a exclusão de uma
 // OS nunca paga INVENTAR peças no estoque.
 
-import { saldoADevolver, temBaixaDeEstoque, faltaEmEstoque, avisoFaltaEmEstoque } from '/home/user/Giropecas/src/lib/estoque.js';
+import { saldoADevolver, temBaixaDeEstoque, faltaEmEstoque, avisoFaltaEmEstoque, devolucaoDeEstoque } from '/home/user/Giropecas/src/lib/estoque.js';
 
 let f = 0;
 const ok = (c, m) => { if (!c) { f++; console.log('FAIL:', m); } else console.log('ok:', m); };
@@ -125,6 +125,45 @@ ok(/2 peça\(s\)/.test(aviso), 'diz quantas pecas');
 ok(/Filtro de oleo \(tinha 1, saiu 3\)/.test(aviso), 'mostra o que tinha e o que saiu');
 ok(/Confira a contagem/.test(aviso), 'diz o que fazer');
 ok(/foi registrada como aconteceu/.test(aviso), 'deixa claro que a baixa nao foi bloqueada');
+
+
+console.log('--- Devolucao ao estoque: o que o banco aceita e a ordem ---');
+// Gravava reference_type = 'estorno' (recusado pelo banco) e somava a peca
+// ANTES de gravar o movimento. Cada tentativa de cancelar uma OS paga
+// inflava o estoque; o cancelamento nunca concluia.
+const saidasOS = [
+  { part_id: 'oleo', type: 'saida', quantity: 3 },
+  { part_id: 'filtro', type: 'saida', quantity: 1 },
+];
+const passosDev = devolucaoDeEstoque({
+  movimentos: saidasOS, estoqueAtual: { oleo: 10, filtro: 0 },
+  referenceId: 'os1', referenceType: 'work_order', motivo: 'Cancelamento da OS #1', companyId: 'c1',
+});
+ok(passosDev.length === 2, 'uma devolucao por peca que saiu');
+const oleoDev = passosDev.find(p => p.part_id === 'oleo');
+ok(oleoDev.movimento.type === 'devolucao', 'o type diz que e devolucao');
+ok(oleoDev.movimento.reference_type === 'work_order', 'o reference_type diz para onde o id aponta');
+ok(oleoDev.movimento.reference_id === 'os1', 'ligado a OS, para o saldo fechar');
+ok(oleoDev.movimento.previous_stock === 10 && oleoDev.movimento.new_stock === 13, 'registra antes e depois');
+ok(oleoDev.novoEstoque === 13, 'o saldo novo e o que vai para a peca');
+ok(passosDev.find(p => p.part_id === 'filtro').novoEstoque === 1, 'peca zerada volta para 1');
+ok(Object.keys(passosDev[0])[2] === 'movimento' && Object.keys(passosDev[0])[3] === 'novoEstoque',
+  'cada passo traz o movimento antes do saldo — a ordem de gravacao');
+
+// Repetir depois de gravado nao devolve de novo.
+const repetida = devolucaoDeEstoque({
+  movimentos: [...saidasOS, ...passosDev.map(p => p.movimento)],
+  estoqueAtual: { oleo: 13, filtro: 1 }, referenceId: 'os1', referenceType: 'work_order',
+});
+ok(repetida.length === 0, 'cancelar de novo nao devolve de novo');
+
+ok(devolucaoDeEstoque({ movimentos: [], referenceId: 'v1', referenceType: 'sale' }).length === 0,
+  'nada saiu, nada volta');
+let barrou = false;
+try { devolucaoDeEstoque({ movimentos: saidasOS, referenceId: 'os1', referenceType: 'estorno' }); } catch { barrou = true; }
+ok(barrou, "'estorno' e recusado aqui, antes de chegar ao banco");
+ok(devolucaoDeEstoque({ movimentos: saidasOS, referenceId: 'os1', referenceType: 'work_order' })[0].movimento.previous_stock === 0,
+  'sem estoque atual informado, parte de zero em vez de NaN');
 
 console.log(f === 0 ? '\n✅ DEVOLUCAO DE ESTOQUE OK' : `\n❌ ${f} falha(s)`);
 process.exit(f ? 1 : 0);

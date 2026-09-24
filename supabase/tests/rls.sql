@@ -219,23 +219,42 @@ begin
     case when n = 1 then 'ok' else 'FALHA' end, n, chr(10));
 
   -- ===================== Visitante não autenticado ====================
+  -- Duas maneiras de passar, e as duas servem:
+  --   * a consulta devolve 0 linhas (a política não deixou passar nada);
+  --   * a consulta nem roda ("permission denied for function"), porque
+  --     anon não executa mais current_company_id()/is_super_admin().
+  -- A segunda é a mais forte: barra antes de olhar a tabela. Aceitar só a
+  -- primeira faria este arquivo acusar falha justamente quando o banco
+  -- ficou MAIS fechado.
   perform set_config('request.jwt.claims', '', true);
   perform set_config('role', 'anon', true);
 
-  select count(*) into n from public.customers;
-  if n <> 0 then falhas := falhas + 1; end if;
-  r := r || format('[%s] anônimo não lê cliente nenhum (viu %s)%s',
-    case when n = 0 then 'ok' else 'FALHA' end, n, chr(10));
+  begin
+    select count(*) into n from public.customers;
+    if n <> 0 then falhas := falhas + 1; end if;
+    r := r || format('[%s] anônimo não lê cliente nenhum (viu %s)%s',
+      case when n = 0 then 'ok' else 'FALHA' end, n, chr(10));
+  exception when others then
+    r := r || '[ok] anônimo não lê cliente nenhum (barrado antes da consulta)' || chr(10);
+  end;
 
-  select count(*) into n from public.companies;
-  if n <> 0 then falhas := falhas + 1; end if;
-  r := r || format('[%s] anônimo não lê oficina nenhuma (viu %s)%s',
-    case when n = 0 then 'ok' else 'FALHA' end, n, chr(10));
+  begin
+    select count(*) into n from public.companies;
+    if n <> 0 then falhas := falhas + 1; end if;
+    r := r || format('[%s] anônimo não lê oficina nenhuma (viu %s)%s',
+      case when n = 0 then 'ok' else 'FALHA' end, n, chr(10));
+  exception when others then
+    r := r || '[ok] anônimo não lê oficina nenhuma (barrado antes da consulta)' || chr(10);
+  end;
 
-  select count(*) into n from public.access_keys;
-  if n <> 0 then falhas := falhas + 1; end if;
-  r := r || format('[%s] anônimo não lê licença nenhuma (viu %s)%s',
-    case when n = 0 then 'ok' else 'FALHA' end, n, chr(10));
+  begin
+    select count(*) into n from public.access_keys;
+    if n <> 0 then falhas := falhas + 1; end if;
+    r := r || format('[%s] anônimo não lê licença nenhuma (viu %s)%s',
+      case when n = 0 then 'ok' else 'FALHA' end, n, chr(10));
+  exception when others then
+    r := r || '[ok] anônimo não lê licença nenhuma (barrado antes da consulta)' || chr(10);
+  end;
 
   perform set_config('role', coalesce(papel, 'postgres'), true);
 

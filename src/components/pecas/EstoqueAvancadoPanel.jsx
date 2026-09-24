@@ -7,10 +7,10 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Package, TrendingUp, AlertTriangle, DollarSign, ArrowUpDown, History } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import { ajusteDeEstoque, estoqueBaixo, efeitoNoSaldo } from '@/lib/estoque';
 
 export default function EstoqueAvancadoPanel() {
   const { company } = useCompany();
@@ -20,7 +20,9 @@ export default function EstoqueAvancadoPanel() {
   const [movements, setMovements] = useState([]);
   const [showAdjust, setShowAdjust] = useState(false);
   const [adjustPart, setAdjustPart] = useState(null);
-  const [adjustForm, setAdjustForm] = useState({ new_quantity: 0, reason: '' });
+  const [adjustForm, setAdjustForm] = useState({ new_quantity: '', reason: '' });
+  const [ajustando, setAjustando] = useState(false);
+  const [busca, setBusca] = useState('');
 
   useEffect(() => { if (company?.id) loadData(); }, [company]);
 
@@ -40,7 +42,7 @@ export default function EstoqueAvancadoPanel() {
   const valorVenda = parts.reduce((s, p) => s + (p.sale_price || 0) * (p.stock_quantity || 0), 0);
   const margemPotencial = valorVenda - valorCusto;
   const totalItens = parts.reduce((s, p) => s + (p.stock_quantity || 0), 0);
-  const baixoEstoque = parts.filter(p => (p.stock_quantity || 0) <= (p.min_stock || 1));
+  const baixoEstoque = parts.filter(estoqueBaixo);
   const semEstoque = parts.filter(p => (p.stock_quantity || 0) === 0);
 
   // Curva ABC por valor de venda
@@ -61,30 +63,51 @@ export default function EstoqueAvancadoPanel() {
 
   const openAdjust = (part) => {
     setAdjustPart(part);
-    setAdjustForm({ new_quantity: part.stock_quantity || 0, reason: '' });
+    setAdjustForm({ new_quantity: String(part.stock_quantity ?? 0), reason: '' });
     setShowAdjust(true);
   };
 
+  // Todas as peças podem ser ajustadas. A lista mostrava só as 10 primeiras
+  // (`parts.slice(0, 10)`), sem busca: numa oficina com 300 peças, 290 não
+  // tinham como receber ajuste por aqui.
+  const termo = busca.trim().toLowerCase();
+  const paraAjustar = (termo
+    ? parts.filter(p => [p.description, p.sku, p.internal_code, p.barcode, p.brand]
+      .some(v => String(v || '').toLowerCase().includes(termo)))
+    : parts
+  ).slice(0, 50);
+
   const handleAdjust = async () => {
-    if (!adjustPart) return;
-    const oldQty = adjustPart.stock_quantity || 0;
-    const newQty = parseInt(adjustForm.new_quantity) || 0;
-    const diff = newQty - oldQty;
-    if (diff === 0) { toast({ title: 'Quantidade não alterada' }); return; }
-    await base44.entities.Part.update(adjustPart.id, { stock_quantity: newQty });
-    await base44.entities.StockMovement.create({
-      company_id: company.id,
-      part_id: adjustPart.id,
-      type: 'ajuste',
-      quantity: Math.abs(diff),
-      reason: adjustForm.reason || 'Ajuste manual',
-      reference_type: 'manual',
-      previous_stock: oldQty,
-      new_stock: newQty,
-    });
-    toast({ title: 'Estoque ajustado!' });
-    setShowAdjust(false);
-    loadData();
+    // Ajuste mexe no estoque e grava histórico; o clique duplo gravava dois.
+    if (!adjustPart || ajustando) return;
+    setAjustando(true);
+    try {
+      // O estoque de agora, do banco — não o da lista carregada quando a
+      // tela abriu. Uma venda no meio do caminho mudava a diferença.
+      const atual = await base44.entities.Part.get(adjustPart.id);
+      const r = ajusteDeEstoque({
+        peca: adjustPart, atual: atual?.stock_quantity, contado: adjustForm.new_quantity,
+        motivo: adjustForm.reason, companyId: company.id,
+      });
+      if (r.erro) {
+        toast({ title: 'Ajuste não feito', description: r.erro, variant: 'destructive' });
+        return;
+      }
+      // Movimento primeiro, saldo depois: se o saldo falhar, a conferência
+      // acha a diferença; o contrário não deixava rastro.
+      await base44.entities.StockMovement.create(r.movimento);
+      await base44.entities.Part.update(adjustPart.id, { stock_quantity: r.novoEstoque });
+      toast({
+        title: 'Estoque ajustado',
+        description: `${adjustPart.description}: ${r.movimento.previous_stock} → ${r.novoEstoque}`,
+      });
+      setShowAdjust(false);
+      loadData();
+    } catch (e) {
+      toast({ title: 'Erro ao ajustar', description: e.message, variant: 'destructive' });
+    } finally {
+      setAjustando(false);
+    }
   };
 
   return (
@@ -137,8 +160,13 @@ export default function EstoqueAvancadoPanel() {
       <Card>
         <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><ArrowUpDown className="w-4 h-4" />Ajuste Rápido de Estoque</CardTitle></CardHeader>
         <CardContent>
+          <Input className="mb-2 h-8" placeholder="Buscar peça por nome, código ou marca..."
+            value={busca} onChange={e => setBusca(e.target.value)} />
           <div className="space-y-2 max-h-60 overflow-y-auto">
-            {parts.slice(0, 10).map(p => (
+            {paraAjustar.length === 0 && (
+              <p className="text-center text-gray-400 py-3 text-sm">Nenhuma peça encontrada</p>
+            )}
+            {paraAjustar.map(p => (
               <div key={p.id} className="flex items-center justify-between py-2 border-b last:border-0">
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">{p.description}</p>
@@ -167,7 +195,9 @@ export default function EstoqueAvancadoPanel() {
                       <p className="text-xs text-gray-400">{m.type} • {m.reason || '—'}</p>
                     </div>
                     <div className="text-right">
-                      <p className={`font-bold ${typeColors[m.type] || ''}`}>{m.type === 'entrada' || m.type === 'devolucao' ? '+' : '-'}{m.quantity}</p>
+                      {/* O sinal sai de efeitoNoSaldo: o ajuste que ACHOU
+                          peças aparecia com "-". */}
+                      <p className={`font-bold ${typeColors[m.type] || ''}`}>{efeitoNoSaldo(m) >= 0 ? '+' : '-'}{m.quantity}</p>
                       <p className="text-xs text-gray-400">{m.previous_stock} → {m.new_stock}</p>
                     </div>
                   </div>
@@ -185,17 +215,20 @@ export default function EstoqueAvancadoPanel() {
           <div className="space-y-3">
             <p className="text-sm text-gray-600">{adjustPart?.description}</p>
             <div>
-              <Label>Nova Quantidade</Label>
-              <Input type="number" value={adjustForm.new_quantity} onChange={e => setAdjustForm(f => ({ ...f, new_quantity: e.target.value }))} />
+              <Label>Quantidade contada</Label>
+              <p className="text-xs text-gray-500 mb-1">Estoque no sistema: {adjustPart?.stock_quantity ?? 0}</p>
+              <Input type="number" min="0" step="any" value={adjustForm.new_quantity} onChange={e => setAdjustForm(f => ({ ...f, new_quantity: e.target.value }))} />
             </div>
             <div>
-              <Label>Motivo</Label>
+              <Label>Motivo *</Label>
               <Input value={adjustForm.reason} onChange={e => setAdjustForm(f => ({ ...f, reason: e.target.value }))} placeholder="Ex: Contagem física, perda..." />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowAdjust(false)}>Cancelar</Button>
-            <Button onClick={handleAdjust} className="bg-red-600 hover:bg-red-700 text-white">Confirmar</Button>
+            <Button onClick={handleAdjust} disabled={ajustando} className="bg-red-600 hover:bg-red-700 text-white">
+              {ajustando ? 'Ajustando...' : 'Confirmar'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

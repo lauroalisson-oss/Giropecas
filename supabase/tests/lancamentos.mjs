@@ -131,6 +131,42 @@ for (const { arquivo, valor } of valoresNasTelas('StockMovement', 'reference_typ
   ok(refsMov.includes(valor), `${arquivo}: movimento reference_type '${valor}' aceito`);
 }
 
+console.log('--- Toda mudanca de saldo tem movimento, gravado ANTES ---');
+// O saldo da peca (parts.stock_quantity) e derivado; o movimento e o
+// registro. Gravar o saldo primeiro e falhar no movimento deixava estoque
+// mudado sem rastro — a devolucao de 'estorno' fazia exatamente isso. E o
+// cadastro da peca regravava o estoque sem movimento nenhum, desfazendo
+// vendas feitas enquanto o formulario estava aberto.
+function escritasDeSaldo() {
+  const achados = [];
+  const andar = (dir) => {
+    for (const nome of readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, nome.name);
+      if (nome.isDirectory()) { andar(p); continue; }
+      if (!/\.(jsx?|mjs)$/.test(nome.name)) continue;
+      const src = readFileSync(p, 'utf8');
+      const movs = [...src.matchAll(/StockMovement\.(create|bulkCreate)\(/g)].map(m => m.index);
+      for (const m of src.matchAll(/Part\.update\(/g)) {
+        const trecho = src.slice(m.index, m.index + 200);
+        const fecha = trecho.indexOf(');');
+        if (!/stock_quantity/.test(fecha > 0 ? trecho.slice(0, fecha) : trecho)) continue;
+        // O movimento mais proximo, em qualquer direcao.
+        const perto = movs.reduce((a, b) => (a == null || Math.abs(b - m.index) < Math.abs(a - m.index) ? b : a), null);
+        const linha = src.slice(0, m.index).split('\n').length;
+        achados.push({ arquivo: path.relative(RAIZ, p), linha, temMovimento: perto != null && Math.abs(perto - m.index) < 2500, antes: perto != null && perto < m.index });
+      }
+    }
+  };
+  andar(path.join(RAIZ, 'src'));
+  return achados;
+}
+const escritas = escritasDeSaldo();
+ok(escritas.length >= 5, `achou as escritas de saldo nas telas (${escritas.length})`);
+for (const e of escritas) {
+  ok(e.temMovimento, `${e.arquivo}:${e.linha}: a mudanca de saldo tem movimento`);
+  ok(e.antes, `${e.arquivo}:${e.linha}: o movimento e gravado ANTES do saldo`);
+}
+
 console.log('--- A prova: com a regra antiga, esta suite teria acusado ---');
 // Regra como estava antes de 20260925000001. 'commission' ficava de fora.
 const antiga = tiposAceitos('20260924999999');

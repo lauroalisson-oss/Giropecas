@@ -151,7 +151,7 @@ export default function PagamentoModal({ order, customer, onClose, onSuccess }) 
               faltas.push({ part_id: item.part_id, descricao: part.description || item.description, saldo, pedido: qtd, falta: qtd - saldo });
             }
             const newStock = saldo - qtd;
-            await base44.entities.Part.update(item.part_id, { stock_quantity: newStock });
+            // Movimento primeiro, saldo depois (ver PDV).
             await base44.entities.StockMovement.create({
               company_id: company.id, part_id: item.part_id, type: 'saida',
               // unit_cost é o CUSTO da peça, não o preço de venda. Estava
@@ -161,6 +161,7 @@ export default function PagamentoModal({ order, customer, onClose, onSuccess }) 
               reason: `OS #${order.order_number}`, reference_id: order.id, reference_type: 'work_order',
               previous_stock: part.stock_quantity, new_stock: newStock,
             });
+            await base44.entities.Part.update(item.part_id, { stock_quantity: newStock });
           }
         }
       }

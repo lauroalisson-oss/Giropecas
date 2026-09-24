@@ -183,10 +183,15 @@ export default function PDV() {
       );
 
       for (const item of cart) {
-        const part = parts.find(p => p.id === item.part_id);
+        // Saldo do banco, AGORA — não o da lista carregada quando o PDV
+        // abriu. Duas vendas da mesma peça com a tela aberta: a segunda
+        // regravava o saldo calculado sobre o número velho e desfazia a
+        // baixa da primeira.
+        const part = await base44.entities.Part.get(item.part_id).catch(() => null);
         if (part) {
           const newStock = (part.stock_quantity || 0) - item.quantity;
-          await base44.entities.Part.update(item.part_id, { stock_quantity: newStock });
+          // Movimento primeiro, saldo depois: se o saldo falhar, a
+          // conferência acha a diferença; o contrário não deixava rastro.
           await base44.entities.StockMovement.create({
             company_id: company.id, part_id: item.part_id, type: 'saida',
             // unit_cost é o CUSTO, não o preço de venda (o item já carrega
@@ -195,6 +200,7 @@ export default function PDV() {
             reason: 'PDV', reference_id: sale.id, reference_type: 'sale',
             previous_stock: part.stock_quantity, new_stock: newStock,
           });
+          await base44.entities.Part.update(item.part_id, { stock_quantity: newStock });
         }
       }
 

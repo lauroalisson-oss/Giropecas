@@ -138,3 +138,104 @@ export function devolucaoDeEstoque({ movimentos, estoqueAtual = {}, referenceId,
     };
   });
 }
+
+// Estoque mínimo da peça. `p.min_stock || 1` fazia 0 virar 1: a peça que o
+// lojista marcou para não alertar nunca continuava alertando.
+export function estoqueMinimo(peca) {
+  const n = Number(peca?.min_stock);
+  return Number.isFinite(n) && n >= 0 && peca?.min_stock !== null && peca?.min_stock !== '' ? n : 1;
+}
+
+export function estoqueBaixo(peca) {
+  return (Number(peca?.stock_quantity) || 0) <= estoqueMinimo(peca);
+}
+
+/**
+ * Quanto um movimento mexe no saldo, com sinal.
+ *
+ * O ajuste grava a DIFERENÇA em módulo (quantity) e o antes/depois. Quem
+ * somava os movimentos não sabia se o ajuste era para mais ou para menos —
+ * a conferência tratava como zero, e a tela mostrava todo ajuste com "-".
+ * O sinal sai do antes/depois.
+ *
+ * Espelho exato do cálculo em supabase/tests/conferencia.sql.
+ */
+export function efeitoNoSaldo(m) {
+  const q = Number(m?.quantity) || 0;
+  if (q <= 0) return 0;
+  switch (m.type) {
+    case 'entrada':
+    case 'devolucao':
+      return q;
+    case 'saida':
+      return -q;
+    case 'ajuste': {
+      const delta = (Number(m.new_stock) || 0) - (Number(m.previous_stock) || 0);
+      return delta >= 0 ? q : -q;
+    }
+    default:
+      return 0;
+  }
+}
+
+export function saldoPelosMovimentos(movimentos) {
+  return (movimentos || []).filter(Boolean).reduce((s, m) => s + efeitoNoSaldo(m), 0);
+}
+
+/**
+ * Ajuste manual: a contagem física manda.
+ *
+ * O lojista informa quanto CONTOU. A diferença é contra o estoque ATUAL do
+ * banco — não o da lista que estava na tela quando ela abriu. Se uma venda
+ * saiu nesse meio-tempo, a diferença calculada contra o número velho
+ * registrava um ajuste do tamanho errado.
+ *
+ * Devolve { erro } ou { movimento, novoEstoque }. Movimento primeiro,
+ * saldo depois — ver devolucaoDeEstoque.
+ */
+export function ajusteDeEstoque({ peca, atual, contado, motivo, companyId }) {
+  if (!peca?.id) return { erro: 'Peça não identificada.' };
+
+  const texto = String(contado ?? '').trim().replace(',', '.');
+  // Campo vazio virava 0 (`parseInt('') || 0`): apagar o número e
+  // confirmar zerava o estoque da peça.
+  if (texto === '') return { erro: 'Informe a quantidade contada.' };
+  const novo = Number(texto);
+  if (!Number.isFinite(novo)) return { erro: 'Quantidade inválida.' };
+  if (novo < 0) return { erro: 'A contagem não pode ser negativa.' };
+
+  // Ajuste sem motivo é estoque que some sem explicação: perda, furto e erro
+  // de contagem ficam iguais no histórico.
+  const porque = String(motivo || '').trim();
+  if (!porque) return { erro: 'Informe o motivo do ajuste (contagem, perda, avaria…).' };
+
+  const antes = Number(atual) || 0;
+  const diferenca = novo - antes;
+  if (diferenca === 0) return { erro: `O estoque já está em ${antes}. Nada a ajustar.` };
+
+  return {
+    diferenca,
+    novoEstoque: novo,
+    movimento: {
+      company_id: companyId, part_id: peca.id, type: 'ajuste',
+      quantity: Math.abs(diferenca), reason: porque, reference_type: 'manual',
+      previous_stock: antes, new_stock: novo,
+    },
+  };
+}
+
+/**
+ * O saldo com que uma peça nasce, registrado como movimento.
+ *
+ * Sem isso a conferência nunca fechava: peça cadastrada com 10 e vendida
+ * em 2 fica com saldo 8, mas os movimentos somam -2 — divergência de 10
+ * para sempre, em toda peça criada com estoque.
+ */
+export function movimentoSaldoInicial({ peca, companyId, motivo = 'Saldo inicial do cadastro' }) {
+  const q = Number(peca?.stock_quantity) || 0;
+  if (!peca?.id || q <= 0) return null;
+  return {
+    company_id: companyId, part_id: peca.id, type: 'entrada', quantity: q,
+    reason: motivo, reference_type: 'manual', previous_stock: 0, new_stock: q,
+  };
+}

@@ -122,7 +122,7 @@ export default function Compras() {
       const part = await base44.entities.Part.get(item.part_id).catch(() => null);
       if (!part) continue;
       const newQty = (part.stock_quantity || 0) + (item.quantity || 0);
-      await base44.entities.Part.update(part.id, { stock_quantity: newQty, cost_price: item.unit_cost || part.cost_price });
+      // Movimento primeiro, saldo depois (ver PDV).
       await base44.entities.StockMovement.create({
         company_id: company.id,
         part_id: part.id,
@@ -135,6 +135,7 @@ export default function Compras() {
         previous_stock: part.stock_quantity || 0,
         new_stock: newQty,
       });
+      await base44.entities.Part.update(part.id, { stock_quantity: newQty, cost_price: item.unit_cost || part.cost_price });
     }
       await base44.entities.Purchase.update(purchase.id, {
         status: 'recebida', received_date: hoje(),

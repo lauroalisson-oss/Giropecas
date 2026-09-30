@@ -5,7 +5,7 @@
 
 import {
   aReceber, aPagar, saldoAtual, projetarFluxo,
-} from '/home/user/Giropecas/src/lib/fluxo.js';
+} from '../../src/lib/fluxo.js';
 
 let f = 0;
 const ok = (c, m) => { if (!c) { f++; console.log('FAIL:', m); } else console.log('ok:', m); };

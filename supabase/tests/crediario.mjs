@@ -5,7 +5,7 @@
 
 import {
   validarPagamento, aplicarPagamento, emAberto, estaQuitado, resumoCrediario,
-} from '/home/user/Giropecas/src/lib/crediario.js';
+} from '../../src/lib/crediario.js';
 
 let f = 0;
 const ok = (c, m) => { if (!c) { f++; console.log('FAIL:', m); } else console.log('ok:', m); };

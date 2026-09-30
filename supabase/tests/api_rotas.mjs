@@ -30,7 +30,7 @@ console.log('--- Cada rota carrega ---');
 const handlers = {};
 for (const nome of ROTAS) {
   try {
-    const mod = await import(`/home/user/Giropecas/api/${nome}.js`);
+    const mod = await import(`../../api/${nome}.js`);
     handlers[nome] = mod.default;
     ok(typeof mod.default === 'function', `${nome}: carrega e exporta o handler`);
   } catch (e) {
@@ -90,13 +90,13 @@ console.log('--- A tabela de codigos chega junto com a rota ---');
 // nfsePreparar importa nfse-dps, que importa shared/ctribnac.json. Se o
 // JSON nao subir junto no pacote da funcao, a rota carrega e so quebra
 // na hora de montar a nota.
-const dps = await import('/home/user/Giropecas/api/_lib/nfse-dps.js');
+const dps = await import('../../api/_lib/nfse-dps.js');
 ok(typeof dps.montarDps === 'function', 'nfse-dps carrega');
 ok(dps.codigoTributacaoNacional('14.01') === '140101',
   'a tabela de 338 codigos esta acessivel a partir da rota');
 ok(dps.descricaoCTribNac('140101')?.length > 10, 'e traz as descricoes');
 
-const evento = await import('/home/user/Giropecas/shared/nfse-evento.js');
+const evento = await import('../../shared/nfse-evento.js');
 ok(typeof evento.montarCancelamento === 'function', 'shared/nfse-evento carrega a partir de api/');
 
 console.log('--- A rota monta uma nota de ponta a ponta ---');

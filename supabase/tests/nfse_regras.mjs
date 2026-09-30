@@ -5,7 +5,7 @@
 
 import {
   checarLicenca, checarLimiteMensal, checarOrdem, inicioDoMes,
-} from '/home/user/Giropecas/api/_lib/nfse-regras.js';
+} from '../../api/_lib/nfse-regras.js';
 
 let f = 0;
 const ok = (c, m) => { if (!c) { f++; console.log('FAIL:', m); } else console.log('ok:', m); };

@@ -16,8 +16,8 @@ const electronFake={
 const orig=Module._load;
 Module._load=function(req,...a){ return req==='electron'?electronFake:orig.call(this,req,...a); };
 
-const cert=require('/home/user/Giropecas/desktop/nfse/certificado.js');
-const sefin=require('/home/user/Giropecas/desktop/nfse/sefin.js');
+const cert=require('../../desktop/nfse/certificado.js');
+const sefin=require('../../desktop/nfse/sefin.js');
 
 let f=0; const ok=(c,m)=>{ if(!c){f++;console.log('FAIL:',m)} else console.log('ok:',m) };
 const PFX=require('./_cert_teste.cjs').garantir().arquivo;

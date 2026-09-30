@@ -20,7 +20,7 @@ if (!SENHAS.valida || !SENHAS.vencida || !SENHAS.admin) {
   process.exit(2);
 }
 
-import { createClient } from '/home/user/Giropecas/node_modules/@supabase/supabase-js/dist/index.mjs';
+import { createClient } from '../../node_modules/@supabase/supabase-js/dist/index.mjs';
 const novo = () => createClient('https://boxolsxxlslqnehptomb.supabase.co',
   'sb_publishable_gE98QS8CEYY4cCtNvADSGQ_4U6hIXPp', { auth:{ persistSession:false } });
 

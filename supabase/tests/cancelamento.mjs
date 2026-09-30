@@ -5,7 +5,7 @@
 // função isolada confere: a ORDEM das gravações, e o que acontece quando
 // uma delas falha no meio e o lojista tenta de novo.
 
-import { planejarCancelamento, executarCancelamento, avisoDeCancelamento } from '/home/user/Giropecas/src/lib/cancelamento.js';
+import { planejarCancelamento, executarCancelamento, avisoDeCancelamento } from '../../src/lib/cancelamento.js';
 
 let f = 0;
 const ok = (c, m) => { if (!c) { f++; console.log('FAIL:', m); } else console.log('ok:', m); };

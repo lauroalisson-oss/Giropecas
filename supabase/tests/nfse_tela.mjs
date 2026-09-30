@@ -4,8 +4,8 @@
 // contasse diferente, o lojista veria folga onde a emissão já está barrada
 // — e descobriria só na hora de emitir para o cliente.
 
-import { pendenciasNfse, nfseNoMes, idDpsDaNota, escolherXml, notaAutorizadaDe, motivoNaoExcluir } from '/home/user/Giropecas/src/lib/nfse-dados.js';
-import { montarDps } from '/home/user/Giropecas/api/_lib/nfse-dps.js';
+import { pendenciasNfse, nfseNoMes, idDpsDaNota, escolherXml, notaAutorizadaDe, motivoNaoExcluir } from '../../src/lib/nfse-dados.js';
+import { montarDps } from '../../api/_lib/nfse-dps.js';
 
 let f = 0;
 const ok = (c, m) => { if (!c) { f++; console.log('FAIL:', m); } else console.log('ok:', m); };

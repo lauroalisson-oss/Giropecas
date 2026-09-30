@@ -4,8 +4,8 @@
 // quando voltar) e o escape do HTML — tudo ali é digitado na oficina e
 // entra numa string de HTML.
 
-import { revisoesDaOrdem } from '/home/user/Giropecas/src/lib/crm.js';
-import { buildPrintHtml } from '/home/user/Giropecas/src/components/PrintReceipt.js';
+import { revisoesDaOrdem } from '../../src/lib/crm.js';
+import { buildPrintHtml } from '../../src/components/PrintReceipt.js';
 
 let f = 0;
 const ok = (c, m) => { if (!c) { f++; console.log('FAIL:', m); } else console.log('ok:', m); };

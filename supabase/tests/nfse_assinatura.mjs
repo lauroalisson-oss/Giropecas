@@ -2,14 +2,14 @@ import fs from 'fs';
 import { gunzipSync } from 'node:zlib';
 import { createRequire } from 'module';
 const _req = createRequire(import.meta.url);
-const { lerCertificado, montarIdDps, assinarDps, compactarParaEnvio, NS_NFSE } = _req('/home/user/Giropecas/desktop/nfse/assinatura.js');
-import { SignedXml } from '/home/user/Giropecas/node_modules/xml-crypto/lib/index.js';
-import { DOMParser } from '/home/user/Giropecas/node_modules/@xmldom/xmldom/lib/index.js';
+const { lerCertificado, montarIdDps, assinarDps, compactarParaEnvio, NS_NFSE } = _req('../../desktop/nfse/assinatura.js');
+import { SignedXml } from '../../node_modules/xml-crypto/lib/index.js';
+import { DOMParser } from '../../node_modules/@xmldom/xmldom/lib/index.js';
 
 let f=0; const ok=(c,m)=>{ if(!c){f++;console.log('FAIL:',m)} else console.log('ok:',m) };
 
 console.log('--- 1. Ler o certificado .pfx ---');
-const pfx = _req('/home/user/Giropecas/supabase/tests/_cert_teste.cjs').garantir().pfx;
+const pfx = _req('../../supabase/tests/_cert_teste.cjs').garantir().pfx;
 const cert = lerCertificado(pfx, 'senha123');
 ok(cert.privateKeyPem.includes('PRIVATE KEY'),'extraiu a chave privada');
 ok(cert.certificateBase64.length > 500,'extraiu o certificado em base64');

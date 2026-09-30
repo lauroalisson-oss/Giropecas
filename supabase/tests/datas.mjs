@@ -5,8 +5,8 @@
 // em UTC, "hoje em UTC" e "hoje na oficina" são o mesmo dia e qualquer
 // conta de data passa, certa ou errada.
 
-import { diaLocal, hoje, diaDoRegistro, somarDias, somarMeses } from '/home/user/Giropecas/src/lib/datas.js';
-import { competenciaDe } from '/home/user/Giropecas/src/lib/comissoes.js';
+import { diaLocal, hoje, diaDoRegistro, somarDias, somarMeses } from '../../src/lib/datas.js';
+import { competenciaDe } from '../../src/lib/comissoes.js';
 
 let f = 0;
 const ok = (c, m) => { if (!c) { f++; console.log('FAIL:', m); } else console.log('ok:', m); };

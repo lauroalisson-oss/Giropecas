@@ -5,7 +5,7 @@
 // OS como faturada. As suítes testavam a conta do estorno; nenhuma
 // perguntava se alguém conseguia chegar nela.
 
-import { acoesDaOrdem, ESTADOS_OS } from '/home/user/Giropecas/src/lib/ordens.js';
+import { acoesDaOrdem, ESTADOS_OS } from '../../src/lib/ordens.js';
 import { readFileSync } from 'node:fs';
 
 let f = 0;
@@ -44,7 +44,7 @@ console.log('--- A tela usa a regra ---');
 // Checagem de forma, nao de comportamento: sem biblioteca de renderizacao
 // no projeto, o que da para garantir e que a tela consulta esta funcao nos
 // dois blocos — o de OS em aberto e o de OS paga.
-const tela = readFileSync('/home/user/Giropecas/src/pages/OrdemDetalhe.jsx', 'utf8');
+const tela = readFileSync(new URL('../../src/pages/OrdemDetalhe.jsx', import.meta.url), 'utf8');
 ok(/acoesDaOrdem\(order\)/.test(tela), 'OrdemDetalhe calcula as acoes pela funcao');
 ok(/acoes\.cancelarDevolveDinheiro[\s\S]{0,900}onClick=\{cancelOrder\}/.test(tela),
   'o bloco de OS paga chama cancelOrder');
@@ -53,7 +53,7 @@ ok(/isActive = acoes\.podeMudarEstado/.test(tela), 'o bloco de OS em aberto usa 
 console.log('--- PDV: venda de balcao tambem cancela com devolucao ---');
 // Antes, venda de balcao devolvida so podia ser EXCLUIDA — o que apaga a
 // venda do mes em que foi feita, em vez de registrar a devolucao no dia.
-const hist = readFileSync('/home/user/Giropecas/src/pages/Historico.jsx', 'utf8');
+const hist = readFileSync(new URL('../../src/pages/Historico.jsx', import.meta.url), 'utf8');
 ok(/const handleCancelSale = async/.test(hist), 'o Historico tem o cancelamento de venda');
 ok(/sale\.status !== VENDA_CANCELADA[\s\S]{0,300}handleCancelSale\(sale\)/.test(hist),
   'o botao aparece para toda venda nao cancelada');

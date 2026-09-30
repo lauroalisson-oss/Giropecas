@@ -12,19 +12,21 @@
 
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   REFERENCIAS_LANCAMENTO, lancamentosDaVenda, estornoDaVenda,
-} from '/home/user/Giropecas/src/lib/caixa.js';
-import { lancamentoPagamentoCompra } from '/home/user/Giropecas/src/lib/compras.js';
-import { lancamentoComissao } from '/home/user/Giropecas/src/lib/comissoes.js';
+} from '../../src/lib/caixa.js';
+import { lancamentoPagamentoCompra } from '../../src/lib/compras.js';
+import { lancamentoComissao } from '../../src/lib/comissoes.js';
 import {
   TIPOS_MOVIMENTO, REFERENCIAS_MOVIMENTO, devolucaoDeEstoque,
-} from '/home/user/Giropecas/src/lib/estoque.js';
+} from '../../src/lib/estoque.js';
 
 let f = 0;
 const ok = (c, m) => { if (!c) { f++; console.log('FAIL:', m); } else console.log('ok:', m); };
 
-const RAIZ = '/home/user/Giropecas';
+// A raiz do repositório, a partir deste arquivo — funciona em qualquer máquina.
+const RAIZ = fileURLToPath(new URL('../../', import.meta.url));
 const MIGRACOES = path.join(RAIZ, 'supabase/migrations');
 
 // A lista aceita pela ÚLTIMA migração (em ordem de nome) que define a

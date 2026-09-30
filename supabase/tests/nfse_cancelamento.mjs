@@ -8,13 +8,13 @@
 import { createRequire } from 'module';
 import {
   montarCancelamento, montarIdEvento, MOTIVOS_CANCELAMENTO, TIPO_EVENTO_CANCELAMENTO,
-} from '/home/user/Giropecas/shared/nfse-evento.js';
-import { DOMParser } from '/home/user/Giropecas/node_modules/@xmldom/xmldom/lib/index.js';
-import { SignedXml } from '/home/user/Giropecas/node_modules/xml-crypto/lib/index.js';
+} from '../../shared/nfse-evento.js';
+import { DOMParser } from '../../node_modules/@xmldom/xmldom/lib/index.js';
+import { SignedXml } from '../../node_modules/xml-crypto/lib/index.js';
 
 const _req = createRequire(import.meta.url);
-const { lerCertificado, assinarEvento, compactarParaEnvio } = _req('/home/user/Giropecas/desktop/nfse/assinatura.js');
-const { garantir } = _req('/home/user/Giropecas/supabase/tests/_cert_teste.cjs');
+const { lerCertificado, assinarEvento, compactarParaEnvio } = _req('../../desktop/nfse/assinatura.js');
+const { garantir } = _req('../../supabase/tests/_cert_teste.cjs');
 
 let f = 0;
 const ok = (c, m) => { if (!c) { f++; console.log('FAIL:', m); } else console.log('ok:', m); };

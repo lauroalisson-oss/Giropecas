@@ -12,7 +12,8 @@
 import { register } from 'node:module';
 import { pathToFileURL } from 'node:url';
 
-const RAIZ = pathToFileURL('/home/user/Giropecas/src/').href;
+// src/ a partir deste arquivo — não da máquina em que ele foi escrito.
+const RAIZ = new URL('../../src/', import.meta.url).href;
 
 // Escrito como string separada para o escape das expressões regulares
 // não se perder dentro do template literal.

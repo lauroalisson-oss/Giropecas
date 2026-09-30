@@ -11,7 +11,7 @@ if (!SENHA_ADAPTADOR) {
   process.exit(2);
 }
 
-import { createClient } from '/home/user/Giropecas/node_modules/@supabase/supabase-js/dist/index.mjs';
+import { createClient } from '../../node_modules/@supabase/supabase-js/dist/index.mjs';
 
 const URL='https://boxolsxxlslqnehptomb.supabase.co';
 const KEY='sb_publishable_gE98QS8CEYY4cCtNvADSGQ_4U6hIXPp';

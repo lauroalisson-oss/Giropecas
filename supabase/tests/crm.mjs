@@ -1,6 +1,6 @@
 import { cpfValido, pendenciasCrediario, crediarioLiberado, aniversariantesDoMes, idade,
   pontuacaoCliente, faixaCliente, resumoClientes, somarMeses, proximaRevisao,
-  revisoesDoVeiculo, avisoProximaRevisao } from '/home/user/Giropecas/src/lib/crm.js';
+  revisoesDoVeiculo, avisoProximaRevisao } from '../../src/lib/crm.js';
 
 let f=0; const ok=(c,m)=>{ if(!c){f++;console.log('FAIL:',m)} else console.log('ok:',m) };
 

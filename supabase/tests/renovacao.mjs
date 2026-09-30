@@ -7,7 +7,7 @@
 
 import {
   renovarLicenca, limiteDeNotas, daysRemaining, isExpired, LIMITE_PADRAO_NOTAS,
-} from '/home/user/Giropecas/src/lib/license.js';
+} from '../../src/lib/license.js';
 
 let f = 0;
 const ok = (c, m) => { if (!c) { f++; console.log('FAIL:', m); } else console.log('ok:', m); };

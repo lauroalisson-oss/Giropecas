@@ -1,0 +1,150 @@
+# Gera o instalador Windows do aplicativo GiroPeças (desktop/) — o mesmo
+# .exe que o build-installer.ps1 gera numa máquina Windows, sem precisar
+# de uma.
+#
+# Quando roda:
+#   - a cada push no main que mexa no aplicativo (desktop/, offline-app/);
+#   - manualmente: Actions → "Instalador Windows" → Run workflow;
+#   - numa tag instalador-v*  (ex.: instalador-v1.0.3): além do arquivo
+#     para baixar, publica uma Release com o .exe anexado — um link fixo
+#     para mandar às oficinas.
+#
+# Onde pegar o .exe: na execução, seção "Artifacts" → giropecas-instalador.
+#
+# O instalador NÃO é assinado com certificado de código (isso exige comprar
+# um certificado de "code signing"). Na primeira instalação o Windows mostra
+# "O Windows protegeu o computador": clique em "Mais informações" →
+# "Executar assim mesmo".
+#
+# Só gera o instalador se a bateria de testes passar: é ela que confere a
+# assinatura da NFS-e, a ponte com o Sefin e o cofre do certificado.
+
+name: Instalador Windows
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'desktop/**'
+      - 'offline-app/**'
+      - '.github/workflows/instalador-windows.yml'
+    tags:
+      - 'instalador-v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  testes:
+    uses: ./.github/workflows/testes.yml
+
+  instalador:
+    name: Gerar Giropecas-Setup.exe
+    needs: testes
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Dependências do aplicativo
+        run: npm ci --no-audit --no-fund
+
+      # Cada instalador sai com um número diferente (1.0.<execução>) — senão
+      # todos se chamariam Giropecas-Setup-1.0.0.exe e não daria para saber
+      # qual está instalado em cada oficina. Numa tag, vale o número da tag.
+      - name: Versão
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/instalador-v* ]]; then
+            VERSAO="${GITHUB_REF#refs/tags/instalador-v}"
+          else
+            VERSAO="1.0.${GITHUB_RUN_NUMBER}"
+          fi
+          npm version "$VERSAO" --no-git-tag-version --allow-same-version
+          echo "VERSAO=$VERSAO" >> "$GITHUB_ENV"
+
+      - name: Gerar instalador
+        run: npm run dist
+        env:
+          # Sem certificado de assinatura de código: não procurar um.
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      # O instalador tem de levar as bibliotecas que assinam a nota. Se o
+      # package-lock voltar a ficar sem elas, o .exe sai e quebra só na
+      # hora de emitir — aqui ele não sai.
+      - name: Conferir o pacote
+        shell: bash
+        run: |
+          RES="dist/win-unpacked/resources"
+          # No Windows o asar lista com barra invertida; normaliza.
+          npx --yes @electron/asar list "$RES/app.asar" | tr '\\' '/' > conteudo.txt
+          for f in /main.js /preload.js /nfse/assinatura.js /nfse/sefin.js \
+                   /node_modules/node-forge/package.json \
+                   /node_modules/xml-crypto/package.json \
+                   /node_modules/@xmldom/xmldom/package.json \
+                   /app/index.html; do
+            grep -qx "$f" conteudo.txt || { echo "FALTA no instalador: $f"; exit 1; }
+          done
+          echo "Pacote completo."
+          ls -la dist/*.exe
+
+      # Estar no pacote não basta: carrega o código de assinatura DE DENTRO
+      # dele, com o próprio executável em modo Node. As dependências têm de
+      # vir do pacote — nesta máquina não há outras para esconder a falta.
+      - name: Carregar a assinatura de dentro do pacote
+        shell: bash
+        env:
+          ELECTRON_RUN_AS_NODE: '1'
+        run: |
+          ./dist/win-unpacked/Giropecas.exe -e "
+            const path = require('path');
+            const asar = path.resolve('dist/win-unpacked/resources/app.asar');
+            const a = require(asar + '/nfse/assinatura.js');
+            const s = require(asar + '/nfse/sefin.js');
+            for (const [nome, fn] of Object.entries({ lerCertificado: a.lerCertificado, assinarDps: a.assinarDps, assinarEvento: a.assinarEvento, enviarDps: s.enviarDps })) {
+              if (typeof fn !== 'function') { console.error('faltou ' + nome); process.exit(1); }
+            }
+            const forge = require.resolve('node-forge', { paths: [asar + '/nfse'] });
+            if (!forge.includes('app.asar')) { console.error('node-forge veio de fora do pacote: ' + forge); process.exit(1); }
+            console.log('Assinatura carregada de dentro do pacote.');
+          "
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: giropecas-instalador
+          path: desktop/dist/Giropecas-Setup-*.exe
+          if-no-files-found: error
+          retention-days: 90
+
+  release:
+    name: Publicar Release
+    needs: instalador
+    if: startsWith(github.ref, 'refs/tags/instalador-v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: giropecas-instalador
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: GiroPeças — instalador ${{ github.ref_name }}
+          files: Giropecas-Setup-*.exe
+          body: |
+            Instalador do aplicativo GiroPeças para Windows.
+
+            1. Baixe o `Giropecas-Setup-*.exe` abaixo.
+            2. Dois cliques para instalar. Se aparecer "O Windows protegeu o computador", clique em **Mais informações → Executar assim mesmo** (o instalador não tem certificado de assinatura de código).
+            3. Na primeira abertura, escolha **Online** para emitir NFS-e, e configure o certificado A1 em Configurações → Fiscal.

@@ -9,7 +9,7 @@ import {
   dividirPagamento, lancamentosDaVenda, taxaDeCartao, totalDeTaxas,
   estornoDaVenda, vendaValida,
   taxaIncerta, faixaDaTaxa, maquinaPadrao, maquinasCadastradas, BANDEIRAS, MAQUINAS, MAQUINA_GERAL,
-} from '/home/user/Giropecas/src/lib/caixa.js';
+} from '../../src/lib/caixa.js';
 import { readFileSync } from 'node:fs';
 
 let f = 0;
@@ -324,11 +324,11 @@ ok(faixaDaTaxa({ method: 'dinheiro', amount: 10 }, porBandeira).max === 0, 'dinh
 console.log('--- As telas usam a lista do cadastro ---');
 // As telas de pagamento tinham 5 bandeiras escritas a mao; o cadastro, 7.
 for (const arq of ['src/pages/PDV.jsx', 'src/components/PagamentoModal.jsx', 'src/pages/TaxasCartao.jsx']) {
-  const src = readFileSync(`/home/user/Giropecas/${arq}`, 'utf8');
+  const src = readFileSync(new URL(`../../${arq}`, import.meta.url), 'utf8');
   ok(!/\['Visa',\s*'Mastercard'/.test(src), `${arq}: sem lista de bandeiras escrita a mao`);
 }
 for (const arq of ['src/pages/PDV.jsx', 'src/components/PagamentoModal.jsx']) {
-  const src = readFileSync(`/home/user/Giropecas/${arq}`, 'utf8');
+  const src = readFileSync(new URL(`../../${arq}`, import.meta.url), 'utf8');
   ok(/BANDEIRAS\.map/.test(src), `${arq}: oferece as bandeiras do cadastro`);
   ok(/maquinasCadastradas\(cardRates\)/.test(src), `${arq}: deixa escolher a maquininha`);
   ok(/taxaIncerta\(pay, cardRates\)/.test(src), `${arq}: avisa quando a taxa e incerta`);

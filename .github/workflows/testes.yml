@@ -1,0 +1,41 @@
+# Roda a bateria inteira (npm test) a cada push e a cada pull request.
+#
+# A bateria roda cada suíte em dois fusos (America/Sao_Paulo e UTC) — ver
+# supabase/tests/rodar.mjs. As duas suítes que entram no banco como um
+# lojista de verdade (adaptador, contextos) são puladas aqui: precisam de
+# senhas de usuários de teste, que não ficam no GitHub.
+#
+# As conferências SQL (rls.sql, conferencia.sql, permissoes.sql) rodam no
+# SQL Editor do Supabase, não aqui.
+
+name: Testes
+
+on:
+  push:
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  testes:
+    name: npm test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Dependências
+        run: npm ci --no-audit --no-fund
+
+      - name: Testes
+        run: npm test
+
+      - name: Build do site
+        run: npm run build

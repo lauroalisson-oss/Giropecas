@@ -16,7 +16,7 @@ const electronFake = { app: { getPath: () => tmp }, ipcMain: { handle: () => {} 
 const orig = Module._load;
 Module._load = function (req, ...a) { return req === 'electron' ? electronFake : orig.call(this, req, ...a); };
 
-const config = require('/home/user/Giropecas/desktop/config.js');
+const config = require('../../desktop/config.js');
 
 let f = 0;
 const ok = (c, m) => { if (!c) { f++; console.log('FAIL:', m); } else console.log('ok:', m); };
@@ -45,8 +45,8 @@ ok(c.modo === 'nuvem' && c.urlNuvem === 'https://giro.vercel.app', 'guarda o mod
 
 console.log('--- PINO DE ORIGEM (quem pode mandar assinar) ---');
 const { pathToFileURL } = require('url');
-const APP = pathToFileURL(path.join('/home/user/Giropecas/desktop', 'app', 'index.html')).href;
-const CONECTAR = pathToFileURL('/home/user/Giropecas/desktop/conectar.html').href;
+const APP = pathToFileURL(path.join(__dirname, '../../desktop', 'app', 'index.html')).href;
+const CONECTAR = pathToFileURL(path.join(__dirname, '../../desktop/conectar.html')).href;
 
 ok(config.origemAutorizada('https://giro.vercel.app/ordens/123'), 'o proprio sistema e autorizado');
 ok(config.origemAutorizada(APP), 'o app offline embutido e autorizado');
@@ -55,9 +55,9 @@ ok(config.origemAutorizada(CONECTAR), 'a tela de conexao e autorizada');
 // Um .html baixado tambem e "file://" — nao pode herdar acesso ao certificado.
 ok(!config.origemAutorizada(pathToFileURL('/home/user/Downloads/nota.html').href),
   'PINO: arquivo local fora da pasta do app e recusado');
-ok(!config.origemAutorizada('file:///home/user/Giropecas/desktop/../../senha.html'),
+ok(!config.origemAutorizada(pathToFileURL(path.join(__dirname, '../../desktop')).href + '/../../senha.html'),
   'PINO: caminho com .. nao escapa da pasta do app');
-ok(!config.origemAutorizada('file:///home/user/Giropecas/desktop-outro/app/index.html'),
+ok(!config.origemAutorizada(pathToFileURL(path.join(__dirname, '../../desktop-outro/app/index.html')).href),
   'PINO: pasta vizinha de nome parecido e recusada');
 
 ok(!config.origemAutorizada('https://giro.vercel.app.golpe.com/'),

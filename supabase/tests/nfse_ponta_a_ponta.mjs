@@ -1,11 +1,11 @@
 import fs from 'fs';
 import { gunzipSync } from 'node:zlib';
-import { montarDps } from '/home/user/Giropecas/api/_lib/nfse-dps.js';
+import { montarDps } from '../../api/_lib/nfse-dps.js';
 import { createRequire } from 'module';
 const _req = createRequire(import.meta.url);
-const { lerCertificado, assinarDps, compactarParaEnvio } = _req('/home/user/Giropecas/desktop/nfse/assinatura.js');
-import { SignedXml } from '/home/user/Giropecas/node_modules/xml-crypto/lib/index.js';
-import { DOMParser } from '/home/user/Giropecas/node_modules/@xmldom/xmldom/lib/index.js';
+const { lerCertificado, assinarDps, compactarParaEnvio } = _req('../../desktop/nfse/assinatura.js');
+import { SignedXml } from '../../node_modules/xml-crypto/lib/index.js';
+import { DOMParser } from '../../node_modules/@xmldom/xmldom/lib/index.js';
 
 let f=0; const ok=(c,m)=>{ if(!c){f++;console.log('FAIL:',m)} else console.log('ok:',m) };
 
@@ -23,7 +23,7 @@ ok(dps.xml.length>400,`XML gerado (${dps.xml.length} chars)`);
 console.log(`   ISS: R$ ${dps.iss.toFixed(2)} sobre R$ ${dps.total.toFixed(2)}`);
 
 console.log('2) Assinar com o certificado local');
-const cert=lerCertificado(_req('/home/user/Giropecas/supabase/tests/_cert_teste.cjs').garantir().pfx,'senha123');
+const cert=lerCertificado(_req('../../supabase/tests/_cert_teste.cjs').garantir().pfx,'senha123');
 const assinado=assinarDps(dps.xml,cert,dps.id);
 ok(assinado.includes('Signature'),'assinado');
 

@@ -8,7 +8,7 @@
 import {
   saldoADevolver, temBaixaDeEstoque, faltaEmEstoque, avisoFaltaEmEstoque, devolucaoDeEstoque,
   estoqueMinimo, estoqueBaixo, efeitoNoSaldo, saldoPelosMovimentos, ajusteDeEstoque, movimentoSaldoInicial,
-} from '/home/user/Giropecas/src/lib/estoque.js';
+} from '../../src/lib/estoque.js';
 import { readFileSync } from 'node:fs';
 
 let f = 0;
@@ -219,7 +219,7 @@ ok(saldoPelosMovimentos(historia) === 5, `cadastro 10, venda 2, contagem 5: sald
 ok(saldoPelosMovimentos([{ type: 'saida', quantity: 2 }]) === -2, 'sem o saldo inicial, a conta nao fecha — era o bug');
 
 console.log('--- A conferencia SQL faz a mesma conta ---');
-const sql = readFileSync('/home/user/Giropecas/supabase/tests/conferencia.sql', 'utf8');
+const sql = readFileSync(new URL('../../supabase/tests/conferencia.sql', import.meta.url), 'utf8');
 ok(/when\s+type\s*=\s*'ajuste'/i.test(sql), 'a conferencia conta o ajuste');
 ok(/new_stock(\s*,\s*0\s*\))?\s*-\s*(coalesce\(\s*)?previous_stock/i.test(sql), 'e tira o sinal do antes/depois, como efeitoNoSaldo');
 

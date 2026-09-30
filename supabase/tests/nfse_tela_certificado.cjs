@@ -1,6 +1,6 @@
 // Extrai a funcao cardCertificado do app.js e executa com stubs.
-const fs=require('fs'), vm=require('vm');
-const src=fs.readFileSync('/home/user/Giropecas/offline-app/app.js','utf8');
+const fs=require('fs'), vm=require('vm'), path=require('path');
+const src=fs.readFileSync(path.join(__dirname, '../../offline-app/app.js'),'utf8');
 const ini=src.indexOf('function cardCertificado()');
 const fim=src.indexOf('// Busca a situação e redesenha');
 if(ini<0||fim<0){ console.log('FAIL: funcao nao encontrada'); process.exit(1); }

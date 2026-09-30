@@ -6,7 +6,7 @@
 
 import {
   custoDasVendas, comissoes, inadimplencia, dre, vendaPorMeio, resumoDeVendas,
-} from '/home/user/Giropecas/src/lib/relatorios.js';
+} from '../../src/lib/relatorios.js';
 
 let f = 0;
 const ok = (c, m) => { if (!c) { f++; console.log('FAIL:', m); } else console.log('ok:', m); };

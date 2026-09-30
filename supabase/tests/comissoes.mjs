@@ -7,7 +7,7 @@
 import {
   geraComissao, competenciaDe, competenciaDaOrdem, resumoComissoes,
   totaisComissoes, podePagarComissao, lancamentoComissao, REFERENCIA_COMISSAO,
-} from '/home/user/Giropecas/src/lib/comissoes.js';
+} from '../../src/lib/comissoes.js';
 
 let f = 0;
 const ok = (c, m) => { if (!c) { f++; console.log('FAIL:', m); } else console.log('ok:', m); };

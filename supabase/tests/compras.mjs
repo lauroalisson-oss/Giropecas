@@ -9,7 +9,7 @@ import {
   podeReceber, podePagar, impactoExclusaoConta,
   podeRegistrarPagamento, dataDePagamento, lancamentoPagamentoCompra,
   situacaoCompra, aPagarEmCompras,
-} from '/home/user/Giropecas/src/lib/compras.js';
+} from '../../src/lib/compras.js';
 
 let f = 0;
 const ok = (c, m) => { if (!c) { f++; console.log('FAIL:', m); } else console.log('ok:', m); };

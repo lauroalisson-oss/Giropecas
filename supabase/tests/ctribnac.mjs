@@ -8,8 +8,8 @@
 import {
   resolverCTribNac, codigoTributacaoNacional, descricaoCTribNac,
   desdobrosDoItem, TABELA_CTRIBNAC,
-} from '/home/user/Giropecas/shared/ctribnac.js';
-import { codigoTributacaoNacional as viaDps } from '/home/user/Giropecas/api/_lib/nfse-dps.js';
+} from '../../shared/ctribnac.js';
+import { codigoTributacaoNacional as viaDps } from '../../api/_lib/nfse-dps.js';
 
 let f = 0;
 const ok = (c, m) => { if (!c) { f++; console.log('FAIL:', m); } else console.log('ok:', m); };

@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Plus, Search, Package, AlertTriangle, ChevronRight } from 'lucide-react';
 import EstoqueAvancadoPanel from '@/components/pecas/EstoqueAvancadoPanel';
 import CatalogoPecasPanel from '@/components/pecas/CatalogoPecasPanel';

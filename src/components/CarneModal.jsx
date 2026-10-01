@@ -2,7 +2,7 @@ import React, { useRef } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { formatCurrency, formatDate } from '@/lib/formatters';
-import { Printer, X } from 'lucide-react';
+import { Printer } from 'lucide-react';
 
 export default function CarneModal({ titles, customer, company, sale, onClose }) {
   const printRef = useRef(null);

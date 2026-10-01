@@ -1,5 +1,4 @@
-import React from 'react';
-import { formatCurrency, formatDateTime } from '@/lib/formatters';
+import { formatCurrency } from '@/lib/formatters';
 
 // Renders a print-optimized OS layout in a new window
 export function printOrdem({ order, customer, vehicle, company }) {

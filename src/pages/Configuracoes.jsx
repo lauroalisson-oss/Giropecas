@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
-import { Building2, Users, FileText, CreditCard, Save } from 'lucide-react';
+import { Building2, Users, FileText, CreditCard, Save, CheckCircle2 } from 'lucide-react';
 import TaxasCartao from './TaxasCartao';
 import { useToast } from '@/components/ui/use-toast';
 import CertificadoLocalCard from '@/components/CertificadoLocalCard';

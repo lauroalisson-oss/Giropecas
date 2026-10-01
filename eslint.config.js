@@ -34,7 +34,15 @@ export default [
       "react-hooks": pluginReactHooks,
       "unused-imports": pluginUnusedImports,
     },
+    // ATENÇÃO: esta chave `rules` SUBSTITUI as regras dos "recommended"
+    // espalhados acima — não soma. Foi assim que no-undef e
+    // react/jsx-no-undef ficaram desligadas sem ninguém notar, e um ícone
+    // usado sem import (CheckCircle2, em Configurações) passou pelo lint e
+    // pelo build e deixou a tela em branco para todo plano fiscal.
+    // Regra recomendada que importa tem de estar escrita aqui.
     rules: {
+      "no-undef": "error",
+      "react/jsx-no-undef": "error",
       "no-unused-vars": "off",
       "react/jsx-uses-vars": "error",
       "react/jsx-uses-react": "error",

@@ -4,9 +4,9 @@ import { base44 } from '@/api/base44Client';
 import { formatCPF, formatCNPJ, formatPhone, formatCurrency, formatDate, getStatusColor, getStatusLabel } from '@/lib/formatters';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, Edit, Car, ClipboardList, CreditCard, Phone, Mail, MapPin } from 'lucide-react';
+import { ArrowLeft, Edit, Car, ClipboardList, Phone, Mail, MapPin } from 'lucide-react';
 
 export default function ClienteDetalhe() {
   const { id } = useParams();

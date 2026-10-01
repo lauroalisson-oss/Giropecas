@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useCompany } from '@/lib/CompanyContext';
-import { formatCurrency, formatDate, getStatusColor, getStatusLabel } from '@/lib/formatters';
+import { formatCurrency, formatDate } from '@/lib/formatters';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Search, CreditCard, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Printer, Edit2, Save, X } from 'lucide-react';
+import { Search, CreditCard, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Printer, Edit2, Save } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { validarPagamento, aplicarPagamento, emAberto } from '@/lib/crediario';
 import CarneModal from '@/components/CarneModal';

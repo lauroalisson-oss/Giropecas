@@ -2,12 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
 import { useCompany } from '@/lib/CompanyContext';
-import { formatCPF, formatCNPJ, formatPhone, getStatusLabel } from '@/lib/formatters';
+import { formatCPF, formatCNPJ, formatPhone } from '@/lib/formatters';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
-import { Plus, Search, User, Phone, Mail, Car, Edit, ChevronRight, Users } from 'lucide-react';
+import { Plus, Search, User, Phone, Mail, ChevronRight, Users } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import CRMPanel from '@/components/clientes/CRMPanel';
 

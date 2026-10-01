@@ -11,7 +11,7 @@ import {
   AlertTriangle, Plus, ShoppingCart, Users, Wrench,
   ArrowRight, CheckCircle2, Clock
 } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import FinancialPanel from '@/components/FinancialPanel';
 import { hoje, diaLocal, diaDoRegistro } from '@/lib/datas';
 import { estaVencido, emAberto } from '@/lib/crediario';

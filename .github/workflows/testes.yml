@@ -34,6 +34,13 @@ jobs:
       - name: Dependências
         run: npm ci --no-audit --no-fund
 
+      # O lint pega o que o build deixa passar: um componente usado sem
+      # import (no-undef / react/jsx-no-undef). Foi assim que Configurações
+      # ficou em branco para todo plano fiscal — o build passou, o lint
+      # tinha a regra desligada e não rodava no CI.
+      - name: Lint
+        run: npm run lint
+
       - name: Testes
         run: npm test
 

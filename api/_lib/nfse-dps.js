@@ -80,6 +80,20 @@ function opSimpNac(empresa) {
   return empresa?.mei === true ? '1' : '2';
 }
 
+// O endereço do tomador, se estiver COMPLETO para o leiaute nacional;
+// senão, null — e a nota vai sem endereço, que é permitido. Nunca completa
+// com dado da oficina.
+export function enderecoDoTomador(cliente) {
+  const c = cliente || {};
+  const cMun = dig(c.city_ibge_code);
+  const cep = dig(c.zip_code);
+  const logradouro = String(c.address || '').trim();
+  const numero = String(c.address_number || '').trim();
+  const bairro = String(c.neighborhood || '').trim();
+  if (cMun.length !== 7 || cep.length !== 8 || !logradouro || !numero || !bairro) return null;
+  return { cMun, cep, logradouro, numero, bairro, complemento: String(c.address_complement || '').trim() };
+}
+
 /**
  * Monta a DPS de uma OS.
  *
@@ -152,12 +166,22 @@ export function montarDps({ empresa, cliente, servicos = [], numero, serie = '1'
     partes.push(`<toma>`);
     partes.push(tomadorCnpj ? `<CNPJ>${docTomador}</CNPJ>` : `<CPF>${docTomador}</CPF>`);
     partes.push(`<xNome>${esc(cliente.name || 'Consumidor')}</xNome>`);
-    if (cliente.address || cliente.city) {
+    // Endereço do tomador: opcional na NFS-e, e só vai COMPLETO.
+    //
+    // Ia sempre que o cliente tinha endereço ou cidade, e saía errado de
+    // dois jeitos. O município: o cadastro de cliente não tem código IBGE,
+    // e caía no da oficina (`|| municipio`) — cliente de outra cidade saía
+    // na nota como morador de Cipó. E o leiaute: dentro do endereço, número
+    // e bairro são 1-1 (obrigatórios), e não eram enviados — a nota seria
+    // recusada. Sem endereço, a nota vale com CPF/CNPJ e nome.
+    const end = enderecoDoTomador(cliente);
+    if (end) {
       partes.push(`<end><endNac>`);
-      partes.push(`<cMun>${dig(cliente.city_ibge_code) || municipio}</cMun>`);
-      if (cliente.zip_code) partes.push(`<CEP>${dig(cliente.zip_code)}</CEP>`);
+      partes.push(`<cMun>${end.cMun}</cMun><CEP>${end.cep}</CEP>`);
       partes.push(`</endNac>`);
-      if (cliente.address) partes.push(`<xLgr>${esc(cliente.address)}</xLgr>`);
+      partes.push(`<xLgr>${esc(end.logradouro)}</xLgr><nro>${esc(end.numero)}</nro>`);
+      if (end.complemento) partes.push(`<xCpl>${esc(end.complemento)}</xCpl>`);
+      partes.push(`<xBairro>${esc(end.bairro)}</xBairro>`);
       partes.push(`</end>`);
     }
     if (cliente.phone) partes.push(`<fone>${dig(cliente.phone)}</fone>`);

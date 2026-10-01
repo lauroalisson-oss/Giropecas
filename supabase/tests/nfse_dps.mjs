@@ -1,4 +1,4 @@
-import { montarDps, codigoTributacaoNacional, descricaoCTribNac, dataHoraComFuso } from '../../api/_lib/nfse-dps.js';
+import { montarDps, codigoTributacaoNacional, descricaoCTribNac, dataHoraComFuso, enderecoDoTomador } from '../../api/_lib/nfse-dps.js';
 import { DOMParser } from '../../node_modules/@xmldom/xmldom/lib/index.js';
 import TABELA from '../../shared/ctribnac.json' with { type: 'json' };
 
@@ -92,6 +92,34 @@ const todos=Object.keys(TABELA);
 ok(todos.length===338,`tabela com 338 codigos (tem ${todos.length})`);
 ok(todos.every(c=>codigoTributacaoNacional(c)===c),'todos os 338 codigos da tabela sao aceitos');
 ok(!todos.some(c=>c.endsWith('00')),'nenhum codigo oficial termina em 00');
+
+
+{ // escopo proprio
+console.log('--- Endereco do tomador: so vai completo ---');
+// O cliente como o cadastro de hoje o guarda: endereco, cidade e CEP — sem
+// numero, bairro nem codigo IBGE. Antes saia um <end> com o municipio da
+// OFICINA no lugar do do cliente, e sem numero e bairro (1-1 no leiaute):
+// dado fiscal errado, e nota recusada.
+const clienteHoje = { tax_id:'529.982.247-25', name:'Ana Silva', address:'Rua das Flores, 100', city:'Ribeira do Pombal', zip_code:'48400-000' };
+const x = montarDps({ empresa, cliente: clienteHoje, servicos, numero: 7 }).xml;
+ok(x.includes('<toma>') && x.includes('<CPF>52998224725</CPF>'), 'o tomador vai, identificado pelo CPF');
+ok(x.includes('<xNome>Ana Silva</xNome>'), 'com o nome');
+ok(!x.includes('<end>'), 'sem endereco completo, o endereco NAO vai');
+ok((x.match(/<cMun>/g) || []).length === 0, 'e o municipio da oficina nao aparece como se fosse o do cliente');
+
+const completo = { ...clienteHoje, city_ibge_code: '2926608', address: 'Rua das Flores', address_number: '100', neighborhood: 'Centro' };
+const y = montarDps({ empresa, cliente: completo, servicos, numero: 8 }).xml;
+ok(y.includes('<end><endNac><cMun>2926608</cMun><CEP>48400000</CEP></endNac>'), 'completo: o municipio e o CEP DO CLIENTE');
+ok(/<xLgr>Rua das Flores<\/xLgr><nro>100<\/nro><xBairro>Centro<\/xBairro><\/end>/.test(y), 'com logradouro, numero e bairro, nessa ordem');
+const doc = new DOMParser().parseFromString(y, 'text/xml');
+ok(doc.getElementsByTagName('end').length === 1, 'o XML com endereco continua bem formado');
+
+for (const [campo, valor] of [['city_ibge_code', ''], ['city_ibge_code', '290790'], ['zip_code', '4840'], ['address', ''], ['address_number', ''], ['neighborhood', '  ']]) {
+  ok(enderecoDoTomador({ ...completo, [campo]: valor }) === null, `faltando ${campo || '?'} (${JSON.stringify(valor)}): sem endereco`);
+}
+ok(enderecoDoTomador(null) === null, 'cliente nulo');
+ok(enderecoDoTomador({ ...completo, address_complement: 'Fundos' }).complemento === 'Fundos', 'complemento vai quando existe');
+}
 
 console.log(f===0?'\n✅ GERADOR DA DPS OK':`\n❌ ${f} falha(s)`);
 process.exit(f?1:0);

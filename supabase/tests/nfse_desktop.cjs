@@ -70,6 +70,37 @@ console.log('--- Endpoints do Sefin ---');
 ok(sefin.HOSTS.homologacao.includes('producaorestrita'),'homologacao aponta para producao restrita');
 ok(sefin.HOSTS.producao==='sefin.nfse.gov.br','producao aponta para o host oficial');
 ok(sefin.CAMINHOS.producao.includes('/SefinNacional/nfse'),'caminho de envio correto');
+// "/API/SefinNacional/docs" e a pagina da documentacao; a API responde em
+// /SefinNacional nos dois ambientes. Com /API, homologacao dava 404.
+ok(sefin.CAMINHOS.homologacao==='/SefinNacional/nfse','homologacao no mesmo caminho da producao (sem /API)');
+
+console.log('--- Resposta do Sefin ---');
+const {gzipSync}=require('zlib');
+const resp=(status,json)=>sefin.interpretar({status,json,texto:json?JSON.stringify(json):''});
+// Formato real da recusa: campos com inicial MAIUSCULA. Lido em minuscula,
+// a mensagem chegava VAZIA a tela.
+const recusa=resp(400,{tipoAmbiente:2,versaoAplicativo:'x',dataHoraProcessamento:'2026-10-02T10:00:00-03:00',
+  erros:[{Codigo:'E0004',Descricao:'Tipo de inscricao invalido',Complemento:'infDPS/Id'},{Codigo:'E0121',Descricao:'xNome nao permitido'}]});
+ok(!recusa.ok,'recusa nao e sucesso');
+ok(/E0004 Tipo de inscricao invalido \(infDPS\/Id\)/.test(recusa.erro),`mensagem com codigo, descricao e complemento (deu "${recusa.erro}")`);
+ok(/E0121/.test(recusa.erro)&&recusa.erro.includes(' | '),'todos os erros, separados');
+ok(recusa.codigos.join()==='E0004,E0121','codigos para diagnostico');
+ok(resp(400,{erros:[{codigo:'E0714',descricao:'Assinatura invalida'}]}).erro==='E0714 Assinatura invalida','formato antigo (minuscula) continua lido');
+ok(resp(400,{erro:[{Codigo:'E1235',Descricao:'Falha no schema'}]}).codigos[0]==='E1235','lista em "erro" (singular)');
+ok(resp(404,{codigo:'404',mensagem:'Nao encontrado'}).erro==='Nao encontrado','erro simples com mensagem');
+ok(resp(500,null).erro==='HTTP 500','sem corpo: o status');
+ok(sefin.interpretar({status:502,json:null,texto:'<html>Bad Gateway</html>'}).erro.includes('Bad Gateway'),'corpo nao-JSON aparece');
+
+const xml='<NFSe><infNFSe Id="NFS1"/></NFSe>';
+const autorizada=resp(201,{chaveAcesso:'1'.repeat(50),idDps:'DPS1',nfseXmlGZipB64:gzipSync(Buffer.from(xml)).toString('base64')});
+ok(autorizada.ok&&autorizada.chaveAcesso==='1'.repeat(50),'autorizada: chave de acesso');
+ok(autorizada.xmlNfse===xml,'autorizada: XML da nota descompactado');
+
+console.log('--- Resposta de evento (cancelamento) ---');
+ok(resp(201,{retEvento:{cStat:144,xMotivo:'Evento registrado',idEvento:'EVT1'}}).ok,'cStat 144: registrado');
+const evRecusado=resp(200,{retEvento:{cStat:840,xMotivo:'NFS-e ja cancelada'}});
+ok(!evRecusado.ok&&/840 NFS-e ja cancelada/.test(evRecusado.erro),'outro cStat com HTTP 200 e recusa, com o motivo');
+ok(resp(204,null).ok,'204 sem corpo: aceito');
 
 console.log(f===0?'\n✅ MODULO DESKTOP OK':`\n❌ ${f} falha(s)`);
 process.exit(f?1:0);

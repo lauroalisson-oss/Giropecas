@@ -9,6 +9,10 @@ import {
 import { useToast } from '@/components/ui/use-toast';
 import { URL_INSTALADOR, enderecoDoSistema } from '@/lib/instalador';
 import { ponteDesktop } from '@/lib/nfse';
+import { useCompany } from '@/lib/CompanyContext';
+
+const soDigitos = (v) => String(v || '').replace(/\D/g, '');
+const formatarCnpj = (c) => soDigitos(c).replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
 
 // Certificado digital A1 da oficina.
 //
@@ -20,6 +24,7 @@ import { ponteDesktop } from '@/lib/nfse';
 // provedor não tem como assinar nada em nome dela — a responsabilidade
 // pela nota fica com quem presta o serviço, que é como deve ser.
 export default function CertificadoLocalCard() {
+  const { company } = useCompany();
   const { toast } = useToast();
   const ponte = ponteDesktop();
 
@@ -156,6 +161,15 @@ export default function CertificadoLocalCard() {
               </p>
               {situacao.titular && (
                 <p className="text-gray-600 mt-0.5 break-all">{situacao.titular}</p>
+              )}
+              {situacao.cnpj && (
+                <p className="text-gray-600 mt-0.5">CNPJ do certificado: {formatarCnpj(situacao.cnpj)}</p>
+              )}
+              {situacao.cnpj && soDigitos(company?.cnpj).length === 14 && soDigitos(company.cnpj) !== situacao.cnpj && (
+                <p className="text-red-700 mt-1">
+                  Este certificado é de outro CNPJ: a oficina está cadastrada com {formatarCnpj(company.cnpj)}.
+                  A nota não será emitida até um dos dois ser corrigido.
+                </p>
               )}
               {situacao.validoAte && (
                 <p className={vencido ? 'text-red-700 mt-0.5' : venceLogo ? 'text-amber-700 mt-0.5' : 'text-green-700 mt-0.5'}>

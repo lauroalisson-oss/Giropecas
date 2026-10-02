@@ -54,6 +54,11 @@ function lerCertificado(pfxBuffer, senha) {
   const cert = bagCert.cert;
   const agora = new Date();
 
+  // Cadeia para a conexão com o Sefin: o certificado da oficina primeiro,
+  // depois os intermediários que vieram no arquivo.
+  const cadeiaPem = [cert, ...bagsCert.map(b => b.cert).filter(c => c && c !== cert)]
+    .map(c => forge.pki.certificateToPem(c)).join('');
+
   return {
     privateKeyPem: forge.pki.privateKeyToPem(bagChave.key),
     certificatePem: forge.pki.certificateToPem(cert),
@@ -65,7 +70,28 @@ function lerCertificado(pfxBuffer, senha) {
     validoAte: cert.validity.notAfter,
     expirado: cert.validity.notAfter < agora,
     titular: cert.subject.attributes.map(a => `${a.shortName}=${a.value}`).join(', '),
+    cnpj: cnpjDoCertificado(cert),
+    cadeiaPem,
   };
+}
+
+// CNPJ do titular de um e-CNPJ ICP-Brasil.
+//
+// Fica no "nome alternativo" do certificado (OID 2.16.76.1.3.3) e,
+// na maioria das ACs, também no fim do nome comum ("RAZÃO SOCIAL:CNPJ").
+// Devolve null se não achar — certificado de pessoa física, por exemplo.
+const OID_CNPJ_DER = '\x06\x05\x60\x4c\x01\x03\x03'; // 2.16.76.1.3.3
+function cnpjDoCertificado(cert) {
+  const san = (cert.extensions || []).find(e => e.id === '2.5.29.17' || e.name === 'subjectAltName');
+  const bruto = typeof san?.value === 'string' ? san.value : '';
+  const i = bruto.indexOf(OID_CNPJ_DER);
+  if (i >= 0) {
+    const m = bruto.slice(i + OID_CNPJ_DER.length).match(/\d{14}/);
+    if (m) return m[0];
+  }
+  const cn = cert.subject.getField('CN')?.value || '';
+  const m = String(cn).match(/:(\d{14})\s*$/);
+  return m ? m[1] : null;
 }
 
 // Monta o Id da DPS: 45 caracteres.
@@ -163,6 +189,7 @@ function compactarParaEnvio(xmlAssinado) {
 }
 
 module.exports = {
+  cnpjDoCertificado,
   NS_NFSE,
   lerCertificado,
   montarIdDps,

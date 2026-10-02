@@ -45,7 +45,8 @@ ok(!s.expirado,'nao esta expirado');
 
 console.log('--- Carregar para emitir ---');
 const c=cert.carregar();
-ok(Buffer.isBuffer(c.pfx) && c.senha==='senha123','carrega pfx e senha sem pedir nada');
+ok(/PRIVATE KEY/.test(c.credencial.key) && /BEGIN CERTIFICATE/.test(c.credencial.cert),'carrega chave e certificado sem pedir nada');
+ok(!('senha' in c) && !('pfx' in c),'a senha e o .pfx nao saem do modulo do certificado');
 ok(c.info.privateKeyPem.includes('PRIVATE KEY'),'chave disponivel para assinar');
 
 console.log('--- Cifra de outra maquina (certificado copiado) ---');
@@ -53,7 +54,7 @@ fs.writeFileSync(path.join(tmp,'certificado','senha.bin'),Buffer.from('OUTRA-MAQ
 ok(cert.situacao().senhaGuardada===false,'senha de outra maquina e ignorada');
 try{ cert.carregar(); ok(false,'deveria exigir a senha'); }
 catch(e){ ok(/Senha do certificado nao disponivel|não disponível/i.test(e.message),'pede a senha em vez de falhar feio'); }
-ok(cert.carregar('senha123').senha==='senha123','aceita a senha digitada na hora');
+ok(/PRIVATE KEY/.test(cert.carregar('senha123').credencial.key),'aceita a senha digitada na hora');
 
 console.log('--- Sem protecao do sistema ---');
 cifraDisponivel=false;
@@ -112,6 +113,54 @@ ok(/indisponível/.test(dan(503,Buffer.from('')).erro)&&/XML da nota já vale/.t
 ok(/indisponível/.test(dan(429,Buffer.from('')).erro),'limite de pedidos (429): mesma explicacao');
 ok(/alguns minutos/.test(dan(404,Buffer.from('')).erro),'404: nota recem-autorizada');
 ok(/E0001/.test(dan(400,Buffer.from('x'),{erros:[{Codigo:'E0001',Descricao:'Chave invalida'}]}).erro),'outro erro: lido como os demais');
+
+console.log('--- Certificado no formato antigo (RC2-40) ---');
+// Muito A1 brasileiro vem cifrado com RC2-40 (exportacao do Windows). A
+// biblioteca TLS nativa recusa esse .pfx ("Unsupported PKCS12 PFX data");
+// por isso a conexao com o Sefin usa a chave e a cadeia abertas pelo forge.
+{
+  const {execFileSync}=require('child_process'); const tls=require('tls');
+  const dir=fs.mkdtempSync(path.join(require('os').tmpdir(),'giro-pfx-'));
+  const sh=(args)=>execFileSync('openssl',args,{cwd:dir,stdio:'pipe'});
+  let temOpenssl=true;
+  try{
+    fs.writeFileSync(path.join(dir,'san.cnf'),[
+      '[req]','distinguished_name=dn','x509_extensions=ext','prompt=no',
+      '[dn]','CN=OFICINA ANTIGA LTDA','[ext]','subjectAltName=otherName:2.16.76.1.3.3;PRINTABLESTRING:11222333000181',
+    ].join('\n'));
+    sh(['req','-x509','-newkey','rsa:2048','-nodes','-keyout','k.pem','-out','c.pem','-days','30','-config','san.cnf']);
+    sh(['pkcs12','-export','-legacy','-in','c.pem','-inkey','k.pem','-out','legado.pfx','-passout','pass:senha123']);
+  }catch(e){ temOpenssl=false; console.log('SKIP: openssl indisponivel ('+String(e.message).split('\n')[0]+')'); }
+  if(temOpenssl){
+    const legado=fs.readFileSync(path.join(dir,'legado.pfx'));
+    let nativoRecusa=false; try{ tls.createSecureContext({pfx:legado,passphrase:'senha123'}); }catch{ nativoRecusa=true; }
+    console.log(`(TLS nativo ${nativoRecusa?'recusa':'aceita'} o .pfx antigo nesta maquina)`);
+    fs.copyFileSync(path.join(dir,'legado.pfx'),path.join(tmp,'legado.pfx'));
+    cert.salvar(path.join(tmp,'legado.pfx'),'senha123');
+    const {credencial,info}=cert.carregar();
+    let ctxOk=true; try{ tls.createSecureContext(credencial); }catch(e){ ctxOk=false; console.log('  ',e.message); }
+    ok(ctxOk,'o .pfx antigo vira chave e cadeia que o TLS aceita');
+    ok(/BEGIN CERTIFICATE/.test(credencial.cert)&&/PRIVATE KEY/.test(credencial.key),'credencial em PEM');
+    ok(info.cnpj==='11222333000181',`CNPJ lido do nome alternativo ICP-Brasil (2.16.76.1.3.3) (deu ${info.cnpj})`);
+    ok(cert.situacao().cnpj==='11222333000181','a tela do certificado mostra o CNPJ');
+    cert.remover();
+  }
+}
+
+console.log('--- CNPJ do certificado x CNPJ da oficina ---');
+{
+  const {conferirCnpj}=require('../../desktop/nfse/index.js');
+  const {lerCertificado}=require('../../desktop/nfse/assinatura.js');
+  const info=lerCertificado(fs.readFileSync(PFX),'senha123');
+  ok(info.cnpj==='12345678000199','CNPJ lido do nome comum ("RAZAO:CNPJ")');
+  const dps=(c)=>`<DPS><infDPS Id="x"><prest><CNPJ>${c}</CNPJ><IM>1</IM></prest></infDPS></DPS>`;
+  let erro=null; try{ conferirCnpj(info,dps('12345678000199')); }catch(e){ erro=e; }
+  ok(!erro,'mesmo CNPJ: segue');
+  erro=null; try{ conferirCnpj(info,dps('11222333000181')); }catch(e){ erro=e.message; }
+  ok(/12\.345\.678\/0001-99/.test(erro||'')&&/11\.222\.333\/0001-81/.test(erro||''),'CNPJ diferente: para, mostrando os dois');
+  erro=null; try{ conferirCnpj({...info,cnpj:null},dps('11222333000181')); }catch(e){ erro=e; }
+  ok(!erro,'certificado sem CNPJ legivel: nao bloqueia (o Sefin confere)');
+}
 
 console.log(f===0?'\n✅ MODULO DESKTOP OK':`\n❌ ${f} falha(s)`);
 process.exit(f?1:0);

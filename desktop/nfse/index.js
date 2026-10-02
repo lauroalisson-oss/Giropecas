@@ -28,6 +28,21 @@ const protegido = (fn) => async (evento, ...args) => {
   }
 };
 
+// O certificado tem de ser do mesmo CNPJ que vai como prestador na DPS.
+// Sem isto, o Sefin recusaria com um código de erro; aqui a oficina vê na
+// hora o que está trocado (outro certificado instalado neste computador,
+// ou o CNPJ do cadastro digitado errado).
+function conferirCnpj(info, xmlDps) {
+  const doPrestador = String(xmlDps).match(/<prest>\s*<CNPJ>(\d{14})<\/CNPJ>/)?.[1];
+  if (!info?.cnpj || !doPrestador || info.cnpj === doPrestador) return;
+  const fmt = (c) => c.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+  throw new Error(
+    `O certificado instalado neste computador é do CNPJ ${fmt(info.cnpj)}, mas a oficina está `
+    + `cadastrada com o CNPJ ${fmt(doPrestador)}. Confira o CNPJ em Configurações → Fiscal, `
+    + 'ou instale o certificado desta oficina.',
+  );
+}
+
 function registrar() {
   // --- Certificado ---
   ipcMain.handle('nfse:certificado:situacao', protegido(() => certificado.situacao()));
@@ -40,11 +55,12 @@ function registrar() {
   ipcMain.handle('nfse:emitir', protegido(async ({ xmlDps, idInfDps, producao = false, senha = null }) => {
     if (!xmlDps) throw new Error('DPS não informada.');
 
-    const { pfx, senha: senhaCert, info } = certificado.carregar(senha);
+    const { credencial, info } = certificado.carregar(senha);
+    conferirCnpj(info, xmlDps);
     const assinado = assinarDps(xmlDps, info, idInfDps);
     const dpsXmlGZipB64 = compactarParaEnvio(assinado);
 
-    const resultado = await enviarDps({ dpsXmlGZipB64, pfx, senha: senhaCert, producao });
+    const resultado = await enviarDps({ dpsXmlGZipB64, credencial, producao });
 
     if (!resultado.ok) {
       // Devolve o erro do Sefin como veio: os códigos (E0714, E0121...)
@@ -84,11 +100,11 @@ function registrar() {
     if (!xmlEvento) throw new Error('Pedido de cancelamento não informado.');
     if (!chaveAcesso) throw new Error('Chave de acesso da nota não informada.');
 
-    const { pfx, senha: senhaCert, info } = certificado.carregar(senha);
+    const { credencial, info } = certificado.carregar(senha);
     const assinado = assinarEvento(xmlEvento, info, idInfPedReg);
     const pedidoXmlGZipB64 = compactarParaEnvio(assinado);
 
-    const resultado = await enviarEvento({ chaveAcesso, pedidoXmlGZipB64, pfx, senha: senhaCert, producao });
+    const resultado = await enviarEvento({ chaveAcesso, pedidoXmlGZipB64, credencial, producao });
     if (!resultado.ok) {
       const err = new Error(resultado.erro);
       err.codigos = resultado.codigos;
@@ -101,8 +117,8 @@ function registrar() {
   // no meio e deixou a nota presa em "validando".
   ipcMain.handle('nfse:consultar-dps', protegido(async ({ idDps, producao = false, senha = null }) => {
     if (!idDps) throw new Error('Id da DPS não informado.');
-    const { pfx, senha: senhaCert } = certificado.carregar(senha);
-    const r = await consultarDps({ idDps, pfx, senha: senhaCert, producao });
+    const { credencial } = certificado.carregar(senha);
+    const r = await consultarDps({ idDps, credencial, producao });
     if (!r.ok) throw new Error(r.erro);
     return r;
   }));
@@ -111,19 +127,19 @@ function registrar() {
   // a janela monta o arquivo e oferece o download.
   ipcMain.handle('nfse:danfse', protegido(async ({ chaveAcesso, producao = false, senha = null }) => {
     if (!chaveAcesso) throw new Error('Chave de acesso não informada.');
-    const { pfx, senha: senhaCert } = certificado.carregar(senha);
-    const r = await baixarDanfse({ chaveAcesso, pfx, senha: senhaCert, producao });
+    const { credencial } = certificado.carregar(senha);
+    const r = await baixarDanfse({ chaveAcesso, credencial, producao });
     if (!r.ok) throw new Error(r.erro);
     return { pdfBase64: r.pdf.toString('base64') };
   }));
 
   ipcMain.handle('nfse:consultar', protegido(async ({ chaveAcesso, producao = false, senha = null }) => {
     if (!chaveAcesso) throw new Error('Chave de acesso não informada.');
-    const { pfx, senha: senhaCert } = certificado.carregar(senha);
-    const r = await consultarNfse({ chaveAcesso, pfx, senha: senhaCert, producao });
+    const { credencial } = certificado.carregar(senha);
+    const r = await consultarNfse({ chaveAcesso, credencial, producao });
     if (!r.ok) throw new Error(r.erro);
     return r;
   }));
 }
 
-module.exports = { registrar };
+module.exports = { registrar, conferirCnpj };

@@ -82,7 +82,12 @@ function carregar(senhaInformada) {
       + 'Renove o certificado A1 e configure o novo arquivo.',
     );
   }
-  return { pfx, senha, info };
+  // A conexão com o Sefin usa a chave e a cadeia já abertas pelo node-forge,
+  // e NÃO o .pfx cru: muito A1 brasileiro vem cifrado com RC2-40 (formato
+  // antigo, padrão de exportação do Windows), que a biblioteca TLS nativa
+  // recusa ("Unsupported PKCS12 PFX data"). O forge abre os dois formatos.
+  const credencial = { key: info.privateKeyPem, cert: info.cadeiaPem };
+  return { info, credencial };
 }
 
 function situacao() {
@@ -102,7 +107,10 @@ function situacao() {
   try {
     const info = require('./assinatura').lerCertificado(fs.readFileSync(arquivoPfx()), senha);
     const diasParaVencer = Math.ceil((new Date(info.validoAte) - Date.now()) / 86400000);
-    return { ...base, titular: info.titular, validoAte: info.validoAte, expirado: info.expirado, diasParaVencer };
+    return {
+      ...base, titular: info.titular, cnpj: info.cnpj,
+      validoAte: info.validoAte, expirado: info.expirado, diasParaVencer,
+    };
   } catch (e) {
     return { ...base, erro: e.message };
   }

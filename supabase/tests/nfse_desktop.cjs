@@ -102,5 +102,16 @@ const evRecusado=resp(200,{retEvento:{cStat:840,xMotivo:'NFS-e ja cancelada'}});
 ok(!evRecusado.ok&&/840 NFS-e ja cancelada/.test(evRecusado.erro),'outro cStat com HTTP 200 e recusa, com o motivo');
 ok(resp(204,null).ok,'204 sem corpo: aceito');
 
+console.log('--- DANFSe (PDF) ---');
+ok(sefin.HOSTS_ADN.producao==='adn.nfse.gov.br'&&sefin.HOSTS_ADN.homologacao==='adn.producaorestrita.nfse.gov.br','DANFSe vem do Ambiente Nacional (ADN)');
+const pdf=Buffer.from('%PDF-1.7\n...');
+const dan=(status,bruto,json=null)=>sefin.interpretarDanfse({status,bruto,json,texto:bruto?bruto.toString('utf8'):''});
+ok(dan(200,pdf).ok&&dan(200,pdf).pdf===pdf,'PDF valido: devolve os bytes');
+ok(!dan(200,Buffer.from('<html>erro</html>')).ok,'200 que nao e PDF: erro, nao arquivo corrompido');
+ok(/indisponível/.test(dan(503,Buffer.from('')).erro)&&/XML da nota já vale/.test(dan(503,Buffer.from('')).erro),'ADN fora do ar: explica, e lembra que o XML vale');
+ok(/indisponível/.test(dan(429,Buffer.from('')).erro),'limite de pedidos (429): mesma explicacao');
+ok(/alguns minutos/.test(dan(404,Buffer.from('')).erro),'404: nota recem-autorizada');
+ok(/E0001/.test(dan(400,Buffer.from('x'),{erros:[{Codigo:'E0001',Descricao:'Chave invalida'}]}).erro),'outro erro: lido como os demais');
+
 console.log(f===0?'\n✅ MODULO DESKTOP OK':`\n❌ ${f} falha(s)`);
 process.exit(f?1:0);

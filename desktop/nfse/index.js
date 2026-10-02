@@ -8,7 +8,7 @@ const { ipcMain } = require('electron');
 const certificado = require('./certificado');
 const config = require('../config');
 const { assinarDps, assinarEvento, compactarParaEnvio } = require('./assinatura');
-const { enviarDps, consultarNfse, enviarEvento, consultarDps } = require('./sefin');
+const { enviarDps, consultarNfse, enviarEvento, consultarDps, baixarDanfse } = require('./sefin');
 
 // Converte exceção em resposta previsível, para a tela sempre ter o que
 // mostrar — e confere, a cada chamada, de qual endereço veio o pedido.
@@ -105,6 +105,16 @@ function registrar() {
     const r = await consultarDps({ idDps, pfx, senha: senhaCert, producao });
     if (!r.ok) throw new Error(r.erro);
     return r;
+  }));
+
+  // DANFSe: o PDF da nota, para entregar ao cliente. Volta em base64 —
+  // a janela monta o arquivo e oferece o download.
+  ipcMain.handle('nfse:danfse', protegido(async ({ chaveAcesso, producao = false, senha = null }) => {
+    if (!chaveAcesso) throw new Error('Chave de acesso não informada.');
+    const { pfx, senha: senhaCert } = certificado.carregar(senha);
+    const r = await baixarDanfse({ chaveAcesso, pfx, senha: senhaCert, producao });
+    if (!r.ok) throw new Error(r.erro);
+    return { pdfBase64: r.pdf.toString('base64') };
   }));
 
   ipcMain.handle('nfse:consultar', protegido(async ({ chaveAcesso, producao = false, senha = null }) => {

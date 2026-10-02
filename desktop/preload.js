@@ -27,6 +27,9 @@ contextBridge.exposeInMainWorld('giropecasNFSe', {
 
   consultar: (params) => ipcRenderer.invoke('nfse:consultar', params),
 
+  // DANFSe (PDF da nota) do Ambiente Nacional, para entregar ao cliente.
+  baixarDanfse: (params) => ipcRenderer.invoke('nfse:danfse', params),
+
   // Cancelamento: registra o evento e101101 ligado à nota.
   cancelar: (params) => ipcRenderer.invoke('nfse:cancelar', params),
 

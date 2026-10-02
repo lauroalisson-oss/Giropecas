@@ -17,12 +17,19 @@ const HOSTS = {
 // documentação (swagger); a API em si responde em /SefinNacional, como
 // usam os clientes que emitem de fato (pynfse-nacional, nfse-nacional
 // em PHP). Com /API, a primeira emissão em homologação daria 404.
+// O DANFSe (o PDF da nota) é servido pelo Ambiente de Dados Nacional
+// (ADN), noutro host, com o mesmo certificado.
+const HOSTS_ADN = {
+  producao: 'adn.nfse.gov.br',
+  homologacao: 'adn.producaorestrita.nfse.gov.br',
+};
+
 const CAMINHOS = {
   producao: '/SefinNacional/nfse',
   homologacao: '/SefinNacional/nfse',
 };
 
-function requisicao({ host, caminho, corpo, pfx, senha, metodo = 'POST', timeout = 45000 }) {
+function requisicao({ host, caminho, corpo, pfx, senha, metodo = 'POST', timeout = 45000, aceita = 'application/json' }) {
   return new Promise((resolve, reject) => {
     const dados = corpo ? Buffer.from(JSON.stringify(corpo), 'utf8') : null;
 
@@ -37,7 +44,7 @@ function requisicao({ host, caminho, corpo, pfx, senha, metodo = 'POST', timeout
       passphrase: senha,
       headers: {
         'Content-Type': 'application/json',
-        Accept: 'application/json',
+        Accept: aceita,
         ...(dados ? { 'Content-Length': dados.length } : {}),
       },
       timeout,
@@ -45,10 +52,11 @@ function requisicao({ host, caminho, corpo, pfx, senha, metodo = 'POST', timeout
       const pedacos = [];
       res.on('data', (c) => pedacos.push(c));
       res.on('end', () => {
-        const texto = Buffer.concat(pedacos).toString('utf8');
+        const bruto = Buffer.concat(pedacos);
+        const texto = bruto.toString('utf8');
         let json = null;
         try { json = texto ? JSON.parse(texto) : null; } catch { /* resposta não-JSON */ }
-        resolve({ status: res.statusCode, json, texto });
+        resolve({ status: res.statusCode, json, texto, bruto, tipo: String(res.headers['content-type'] || '') });
       });
     });
 
@@ -226,4 +234,48 @@ async function consultarDps({ idDps, pfx, senha, producao = false }) {
   return r.ok ? { ...r, existe: true } : r;
 }
 
-module.exports = { enviarDps, consultarNfse, enviarEvento, consultarDps, interpretar, HOSTS, CAMINHOS };
+// Baixa o DANFSe (PDF) de uma nota autorizada.
+//
+// O ADN às vezes responde 429/5xx (fora do ar, limite de pedidos): o erro
+// volta com a explicação, e o XML da nota continua sendo o documento que
+// vale — o DANFSe é só a representação impressa dele.
+async function baixarDanfse({ chaveAcesso, pfx, senha, producao = false }) {
+  const chave = String(chaveAcesso || '').replace(/\D/g, '');
+  if (chave.length !== 50) throw new Error('Chave de acesso inválida para baixar o DANFSe.');
+  const ambiente = producao ? 'producao' : 'homologacao';
+  const resposta = await requisicao({
+    host: HOSTS_ADN[ambiente],
+    caminho: `/danfse/${chave}`,
+    metodo: 'GET',
+    aceita: 'application/pdf',
+    pfx,
+    senha,
+  });
+  return interpretarDanfse(resposta);
+}
+
+function interpretarDanfse(resposta) {
+  const { status, bruto } = resposta;
+  if (status === 200 && bruto?.subarray(0, 5).toString('latin1') === '%PDF-') {
+    return { ok: true, pdf: bruto };
+  }
+  if (status === 200) {
+    return { ok: false, erro: 'O Ambiente Nacional respondeu, mas não com um PDF. Tente de novo em alguns minutos.' };
+  }
+  if (status === 429 || status >= 500) {
+    return {
+      ok: false,
+      erro: `O serviço do DANFSe do Ambiente Nacional está indisponível agora (HTTP ${status}). `
+        + 'Tente de novo em alguns minutos — o XML da nota já vale como documento.',
+    };
+  }
+  if (status === 404) {
+    return { ok: false, erro: 'O Ambiente Nacional ainda não tem o DANFSe desta nota. Notas recém-autorizadas podem levar alguns minutos.' };
+  }
+  return interpretar(resposta);
+}
+
+module.exports = {
+  enviarDps, consultarNfse, enviarEvento, consultarDps, baixarDanfse,
+  interpretar, interpretarDanfse, HOSTS, HOSTS_ADN, CAMINHOS,
+};

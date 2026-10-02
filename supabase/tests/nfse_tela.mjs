@@ -4,7 +4,7 @@
 // contasse diferente, o lojista veria folga onde a emissão já está barrada
 // — e descobriria só na hora de emitir para o cliente.
 
-import { pendenciasNfse, nfseNoMes, idDpsDaNota, escolherXml, notaAutorizadaDe, motivoNaoExcluir } from '../../src/lib/nfse-dados.js';
+import { pendenciasNfse, nfseNoMes, idDpsDaNota, escolherXml, notaAutorizadaDe, motivoNaoExcluir, producaoDaNota } from '../../src/lib/nfse-dados.js';
 import { montarDps } from '../../api/_lib/nfse-dps.js';
 
 let f = 0;
@@ -157,6 +157,20 @@ ok(/42/.test(msg), 'a mensagem diz o numero da nota');
 ok(/Cancele a nota/.test(msg), 'e diz o que fazer');
 ok(/imposto/.test(msg), 'e explica a consequencia');
 ok(motivoNaoExcluir(null) === null, 'sem nota, sem mensagem');
+
+console.log('--- Ambiente da nota (producao x homologacao) ---');
+// Vale o XML, nao a configuracao atual: nota de teste continua de teste
+// depois que a oficina passa para producao.
+const emp = { cnpj: '12345678000199', im: '1', city_ibge_code: '2907905', state: 'BA', tax_regime: 'simples_nacional', iss_rate: 5 };
+const itens = [{ description: 'x', total_price: 10, servico: { service_code_lc116: '14.01', iss_rate: 5 } }];
+const deTeste = { xml_dps: montarDps({ empresa: emp, servicos: itens, numero: 1, producao: false }).xml };
+const deVerdade = { xml_dps: montarDps({ empresa: emp, servicos: itens, numero: 2, producao: true }).xml };
+ok(producaoDaNota(deTeste, { nfe_environment: 'producao' }) === false, 'nota de homologacao continua de homologacao com a oficina ja em producao');
+ok(producaoDaNota(deVerdade, { nfe_environment: 'homologacao' }) === true, 'nota de producao e de producao');
+ok(producaoDaNota({ xml_content: '<NFSe><infNFSe><DPS><infDPS><tpAmb>1</tpAmb></infDPS></DPS></infNFSe></NFSe>' }, {}) === true,
+  'le tambem o XML devolvido pelo Sefin');
+ok(producaoDaNota({}, { nfe_environment: 'producao' }) === true && producaoDaNota({}, {}) === false,
+  'sem XML: a configuracao da oficina');
 
 console.log(f === 0 ? '\n✅ TELA DE NOTAS OK' : `\n❌ ${f} falha(s)`);
 process.exit(f ? 1 : 0);

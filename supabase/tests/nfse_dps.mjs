@@ -35,6 +35,19 @@ ok(normal.xml.includes('<indTotTrib>'),'E0712: regime normal usa indTotTrib');
 ok(!normal.xml.includes('pTotTribSN'),'regime normal nao usa o do Simples');
 ok(r.id[10]==='2','E0004: tipo de inscricao 2 = CNPJ');
 
+console.log('--- Situacao no Simples (codigo do leiaute nacional) ---');
+// Leiaute nacional: 1 = nao optante | 2 = MEI | 3 = ME/EPP. O codigo
+// usava outra ordem: oficina do Simples saia como MEI (2), e Presumido
+// como ME/EPP (3).
+ok(tag(r.xml,'opSimpNac')==='3',`Simples Nacional = 3, ME/EPP (deu ${tag(r.xml,'opSimpNac')})`);
+ok(tag(r.xml,'opSimpNac')!=='2','oficina do Simples NAO sai como MEI');
+ok(tag(normal.xml,'opSimpNac')==='1','Lucro Presumido = 1, nao optante');
+ok(tag(montarDps({empresa:{...empresa,tax_regime:'lucro_real'},servicos,numero:1}).xml,'opSimpNac')==='1','Lucro Real = 1, nao optante');
+ok(tag(r.xml,'regApTribSN')==='1','ME/EPP: apuracao federal e ISS pelo Simples');
+ok(!normal.xml.includes('regApTribSN'),'nao optante nao leva regime de apuracao do Simples');
+ok(/<regTrib><opSimpNac>3<\/opSimpNac><regApTribSN>1<\/regApTribSN><regEspTrib>0<\/regEspTrib><\/regTrib>/.test(r.xml),
+  'ordem do XSD: opSimpNac, regApTribSN, regEspTrib');
+
 console.log('--- Ordem dos elementos (XSD valida sequencia) ---');
 const ordem=['tpAmb','dhEmi','verAplic','serie','nDPS','dCompet','tpEmit','cLocEmi'];
 let pos=-1,ordemOk=true;

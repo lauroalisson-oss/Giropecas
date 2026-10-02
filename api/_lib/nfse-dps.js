@@ -65,12 +65,20 @@ const money = (v) => (Math.round((Number(v) || 0) * 100) / 100).toFixed(2);
 export const dataHoraComFuso = (d = new Date(), uf) => dataHoraDaOficina(d, uf);
 export const dataSimples = (d = new Date(), uf) => dataDaOficina(d, uf);
 
-// Regime no Simples Nacional, conforme o cadastro da empresa.
-// 1 = optante MEI | 2 = optante ME/EPP | 3 = não optante
-function opSimpNac(empresa) {
-  if (empresa?.tax_regime !== 'simples_nacional') return '3';
-  return empresa?.mei === true ? '1' : '2';
+// Situação no Simples Nacional, no código do leiaute NACIONAL:
+//   1 = não optante | 2 = optante MEI | 3 = optante ME/EPP
+//
+// Estava 1 = MEI, 2 = ME/EPP, 3 = não optante (a ordem de outros
+// documentos fiscais), e o cadastro não tem campo de MEI: toda oficina do
+// Simples saía declarada como MEI, e Lucro Presumido/Real como ME/EPP.
+// O cadastro só tem Simples, Presumido e Real — MEI ainda não é emitido.
+export function opSimpNac(empresa) {
+  return empresa?.tax_regime === 'simples_nacional' ? '3' : '1';
 }
+
+// Regime de apuração do ME/EPP (só vai com opSimpNac = 3):
+//   1 = tributos federais e ISS pelo Simples (no DAS) — o caso comum.
+const REG_AP_TRIB_SN_DAS = '1';
 
 // O endereço do tomador, se estiver COMPLETO para o leiaute nacional;
 // senão, null — e a nota vai sem endereço, que é permitido. Nunca completa
@@ -153,7 +161,11 @@ export function montarDps({ empresa, cliente, servicos = [], numero, serie = '1'
   partes.push(`<prest>`);
   partes.push(`<CNPJ>${cnpj}</CNPJ>`);
   partes.push(`<IM>${esc(empresa.im)}</IM>`);
-  partes.push(`<regTrib><opSimpNac>${opSimpNac(empresa)}</opSimpNac><regEspTrib>0</regEspTrib></regTrib>`);
+  // A ordem é a do XSD: opSimpNac, regApTribSN, regEspTrib.
+  const situacaoSN = opSimpNac(empresa);
+  partes.push(`<regTrib><opSimpNac>${situacaoSN}</opSimpNac>`
+    + (situacaoSN === '3' ? `<regApTribSN>${REG_AP_TRIB_SN_DAS}</regApTribSN>` : '')
+    + `<regEspTrib>0</regEspTrib></regTrib>`);
   partes.push(`</prest>`);
 
   if (temTomador) {

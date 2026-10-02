@@ -115,3 +115,26 @@ export function motivoNaoExcluir(nota) {
     + 'Excluir não cancela a nota: ela continuaria valendo no governo e o imposto '
     + 'continuaria devido. Cancele a nota na tela de Notas Fiscais e depois exclua.';
 }
+
+// O que fazer diante de uma recusa do Sefin, em português de oficina.
+//
+// A mensagem do governo é técnica ("O município emissor deve estar
+// parametrizado para usar os emissores públicos nacionais"). Para os
+// códigos que já se sabe o que significam, diz o que fazer e com quem
+// falar. Código desconhecido: nada — a mensagem original continua na tela.
+const ORIENTACAO_SEFIN = {
+  E0039: 'A prefeitura ainda não liberou a emissão pelo emissor nacional neste município. '
+    + 'Peça ao setor de tributos para habilitar os "emissores públicos nacionais da NFS-e". '
+    + 'Enquanto isso, a nota sai pelo sistema da própria prefeitura.',
+  E0617: 'Para empresa fora do Simples, este município usa a alíquota de ISS cadastrada pela prefeitura '
+    + 'e recusa a informada na nota. Avise o suporte do GiroPeças com esta mensagem.',
+  E0714: 'O Sefin não conseguiu conferir a assinatura da nota. Confira se o certificado instalado '
+    + 'neste computador é o da oficina e está válido; se estiver, avise o suporte do GiroPeças.',
+  E1235: 'Algum dado da nota ficou fora do formato exigido pelo governo. Avise o suporte do GiroPeças '
+    + 'com esta mensagem — ela diz qual campo.',
+};
+
+export function orientacaoErroSefin(texto) {
+  const codigos = [...new Set(String(texto || '').toUpperCase().match(/E\d{4}/g) || [])];
+  return codigos.map(c => ORIENTACAO_SEFIN[c]).filter(Boolean);
+}

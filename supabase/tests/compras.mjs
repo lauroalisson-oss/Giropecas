@@ -10,6 +10,7 @@ import {
   podeRegistrarPagamento, dataDePagamento, lancamentoPagamentoCompra,
   situacaoCompra, aPagarEmCompras,
 } from '../../src/lib/compras.js';
+import { hoje as hojeLocal } from '../../src/lib/datas.js';
 
 let f = 0;
 const ok = (c, m) => { if (!c) { f++; console.log('FAIL:', m); } else console.log('ok:', m); };
@@ -103,7 +104,9 @@ ok(podeRegistrarPagamento({ status: 'recebida', total: 0 })?.erro, 'compra sem v
 ok(podeRegistrarPagamento(null)?.erro, 'compra inexistente e barrada');
 
 console.log('--- A DATA e o que decide o mes do custo ---');
-const hoje = new Date().toISOString().split('T')[0];
+// O dia da OFICINA. toISOString é UTC: depois das 21h no Brasil já é amanhã,
+// e este teste falhava toda noite comparando com o código (que está certo).
+const hoje = hojeLocal();
 ok(dataDePagamento('2026-08-15') === '2026-08-15', 'usa a data informada');
 ok(dataDePagamento('') === hoje, 'sem data, usa hoje');
 ok(dataDePagamento(null) === hoje, 'data nula, usa hoje');

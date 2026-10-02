@@ -7,6 +7,7 @@ import {
   ShieldCheck, AlertTriangle, CheckCircle2, Loader2, Monitor, FileKey, Trash2,
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import { URL_INSTALADOR, enderecoDoSistema } from '@/lib/instalador';
 import { ponteDesktop } from '@/lib/nfse';
 
 // Certificado digital A1 da oficina.
@@ -83,19 +84,39 @@ export default function CertificadoLocalCard() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex items-start gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-            <Monitor className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-            <div className="text-sm text-blue-900 space-y-1">
-              <p className="font-medium">O certificado é configurado no computador da oficina.</p>
-              <p>
-                Abra o sistema pelo <strong>aplicativo Giropeças</strong> instalado naquela máquina
-                e volte a esta tela para instalar o certificado A1.
-              </p>
-              <p className="text-blue-700">
-                O arquivo e a senha ficam só lá — não são enviados ao sistema nem ao provedor.
-                É por isso que a emissão da nota acontece por aquele computador.
-              </p>
+          {/* Fora do aplicativo. A mensagem anterior dizia O QUE fazer
+              ("abra pelo aplicativo") mas não COMO — e quem a lia no
+              navegador continuava procurando o campo do certificado. */}
+          <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-900 space-y-3">
+            <div className="flex items-start gap-2">
+              <Monitor className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <p className="font-medium">Você está no navegador — aqui o certificado não pode ser instalado.</p>
+                <p>
+                  O certificado A1 fica guardado só no computador da oficina, e é o
+                  <strong> aplicativo GiroPeças</strong> (Windows) que o usa para emitir a nota.
+                  Navegador nenhum consegue fazer isso.
+                </p>
+              </div>
             </div>
+            <ol className="list-decimal pl-6 space-y-1">
+              <li>
+                No computador da oficina, <a href={URL_INSTALADOR} target="_blank" rel="noopener noreferrer"
+                  className="font-medium underline">baixe e instale o aplicativo</a>.
+                Se o Windows avisar "O Windows protegeu o computador", clique em
+                {' '}<em>Mais informações → Executar assim mesmo</em>.
+              </li>
+              <li>
+                Abra o aplicativo, digite o endereço
+                {enderecoDoSistema() ? <> <code className="px-1 bg-white border rounded">{enderecoDoSistema()}</code></> : ' deste sistema'}
+                {' '}e clique em <strong>Conectar</strong>.
+              </li>
+              <li>Entre com seu login e volte em <strong>Configurações → Fiscal</strong>. Aqui vai aparecer
+                o botão <strong>Escolher arquivo .pfx</strong> e o campo da senha.</li>
+            </ol>
+            <p className="text-blue-700">
+              O arquivo e a senha ficam só naquele computador — não são enviados ao sistema nem ao provedor.
+            </p>
           </div>
         </CardContent>
       </Card>

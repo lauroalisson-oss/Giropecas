@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useCompany } from '@/lib/CompanyContext';
 import { useLicense } from '@/lib/LicenseContext';
+import { buscarCep, cepValido, camposDoCep } from '@/lib/cep';
 import { limiteDeNotas } from '@/lib/license';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -38,6 +39,18 @@ export default function Configuracoes() {
   };
 
   const set = (field, value) => setForm(prev => ({ ...prev, [field]: value }));
+
+  // CEP da oficina → cidade, UF e código IBGE (o município da NFS-e). A
+  // empresa não tem coluna de bairro: comBairro: false. Ver lib/cep.js.
+  const [cepStatus, setCepStatus] = useState(null);
+  const consultarCep = async () => {
+    if (!cepValido(form.zip_code)) return;
+    setCepStatus({ texto: 'Buscando o CEP...' });
+    const r = await buscarCep(form.zip_code);
+    if (r.erro) { setCepStatus({ erro: true, texto: r.erro }); return; }
+    setForm(prev => ({ ...prev, ...camposDoCep(prev, r, { comBairro: false }) }));
+    setCepStatus({ texto: `${r.cidade}/${r.uf} — código IBGE ${r.ibge} preenchido na aba Fiscal.` });
+  };
 
   const maskPhone = (v) => {
     const d = v.replace(/\D/g, '').slice(0, 11);
@@ -156,7 +169,11 @@ export default function Configuracoes() {
                 </div>
                 <div>
                   <Label>CEP</Label>
-                  <Input className="mt-1" value={form.zip_code || ''} onChange={e => set('zip_code', maskCep(e.target.value))} placeholder="00000-000" maxLength={9} />
+                  <Input className="mt-1" value={form.zip_code || ''} onChange={e => set('zip_code', maskCep(e.target.value))}
+                    onBlur={consultarCep} placeholder="00000-000" maxLength={9} />
+                  {cepStatus && (
+                    <p className={`text-xs mt-1 ${cepStatus.erro ? 'text-amber-700' : 'text-gray-500'}`}>{cepStatus.texto}</p>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -207,6 +224,7 @@ export default function Configuracoes() {
                       <div>
                         <Label>Código IBGE do município</Label>
                         <Input className="mt-1" value={form.city_ibge_code || ''} onChange={e => set('city_ibge_code', e.target.value)} placeholder="7 dígitos" />
+                        <p className="text-xs text-gray-500 mt-1">Preenchido pelo CEP da aba Empresa. Cipó-BA é 2907905.</p>
                       </div>
                       <div>
                         <Label>CNAE principal</Label>

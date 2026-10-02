@@ -63,19 +63,8 @@ export function idDpsDaNota(nota) {
   return null;
 }
 
-// Em qual ambiente a nota foi emitida — produção ou homologação.
-//
-// Vale o que está no XML (tpAmb: 1 = produção, 2 = homologação), não a
-// configuração ATUAL da oficina: depois de passar para produção, as notas
-// de teste continuam sendo de homologação, e consultá-las no host de
-// produção daria "não encontrada".
-export function producaoDaNota(nota, empresa) {
-  for (const xml of [nota?.xml_dps, nota?.xml_content]) {
-    const m = String(xml || '').match(/<tpAmb>\s*([12])\s*<\/tpAmb>/);
-    if (m) return m[1] === '1';
-  }
-  return empresa?.nfe_environment === 'producao';
-}
+// Ambiente da nota: a regra é a mesma do servidor (cancelamento).
+export { producaoDaNota } from '../../shared/nfse-nota.js';
 
 // Escolhe QUAL documento baixar e com que nome.
 //

@@ -7,7 +7,7 @@
 // MESMO nos dois fusos em que o rodar.mjs executa (UTC e São Paulo).
 
 import {
-  fusoDaOficina, dataDaOficina, dataHoraDaOficina, inicioDoMesDaOficina,
+  fusoDaOficina, dataDaOficina, dataHoraDaOficina, inicioDoMesDaOficina, dataHoraLegivel,
 } from '../../shared/relogio-fiscal.js';
 import { montarDps } from '../../api/_lib/nfse-dps.js';
 import { montarCancelamento } from '../../shared/nfse-evento.js';
@@ -64,6 +64,12 @@ const canc = montarCancelamento({
   justificativa: 'Valor do servico digitado errado', agora: NOITE, uf: 'BA',
 });
 ok(tag(canc.xml, 'dhEvento') === '2026-09-30T21:30:00-03:00', `dhEvento na hora da oficina (deu ${tag(canc.xml, 'dhEvento')})`);
+
+console.log('--- Texto para a oficina ler (historico da nota) ---');
+// "Cancelada em ..." era toLocaleString no servidor: 21h30 virava 00:30
+// do dia seguinte.
+ok(dataHoraLegivel(NOITE, 'BA') === '30/09/2026 21:30', `cancelamento das 21h30 registrado como 21h30 (deu ${dataHoraLegivel(NOITE, 'BA')})`);
+ok(dataHoraLegivel(NOITE, 'AM') === '30/09/2026 20:30', 'Amazonas: 20h30');
 
 console.log('--- Limite de notas: onde comeca o mes ---');
 // Antes: setHours(0) do servidor = 21h do ultimo dia do mes anterior.

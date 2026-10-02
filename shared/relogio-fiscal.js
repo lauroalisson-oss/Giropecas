@@ -69,6 +69,12 @@ export function dataHoraDaOficina(d = new Date(), uf) {
     + `${off >= 0 ? '+' : '-'}${p2(Math.floor(abs / 60))}:${p2(abs % 60)}`;
 }
 
+/** "30/09/2026 21:30" — para textos que a oficina lê (histórico da nota). */
+export function dataHoraLegivel(d = new Date(), uf) {
+  const l = partes(d, fusoDaOficina(uf));
+  return `${p2(l.dia)}/${p2(l.mes)}/${l.ano} ${p2(l.hora)}:${p2(l.minuto)}`;
+}
+
 /** O instante em que começou o mês corrente no relógio da oficina. */
 export function inicioDoMesDaOficina(d = new Date(), uf) {
   const fuso = fusoDaOficina(uf);

@@ -6,7 +6,7 @@ import { limiteDeNotas } from '@/lib/license';
 import { formatCurrency, formatDateTime } from '@/lib/formatters';
 import { NFE_STATUS_LABEL, NFE_STATUS_COLOR } from '@/lib/fiscal';
 import {
-  baixarXml, consultarNaSefin, liberarNotaPresa, temPonteDesktop,
+  baixarXml, baixarDanfse, consultarNaSefin, liberarNotaPresa, temPonteDesktop, producaoDaNota,
   pendenciasNfse, nfseNoMes, idDpsDaNota, MODELO_LABEL,
   cancelarNfse, verificarNotaPresa, MOTIVOS_CANCELAMENTO,
 } from '@/lib/nfse';
@@ -19,7 +19,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import {
-  FileText, AlertCircle, CheckCircle, Clock, Info, RefreshCw, Gauge,
+  FileText, FileDown, AlertCircle, CheckCircle, Clock, Info, RefreshCw, Gauge,
   Download, Copy, Monitor, Unlock, Ban, Search, Loader2,
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
@@ -51,7 +51,7 @@ export default function NFe() {
   const consultar = async (nota) => {
     setOcupado(nota.id);
     try {
-      const r = await consultarNaSefin(nota.number, company?.nfe_environment === 'producao');
+      const r = await consultarNaSefin(nota.number, producaoDaNota(nota, company));
       toast({
         title: 'Nota encontrada no Sefin',
         description: `Situação confirmada para a chave ${nota.number}.`,
@@ -62,6 +62,18 @@ export default function NFe() {
       }
     } catch (e) {
       toast({ title: 'Não foi possível consultar', description: e.message, variant: 'destructive' });
+    } finally {
+      setOcupado(null);
+    }
+  };
+
+  const danfse = async (nota) => {
+    setOcupado(nota.id);
+    try {
+      const nome = await baixarDanfse(nota, producaoDaNota(nota, company));
+      toast({ title: 'DANFSe baixado', description: `${nome} — é o PDF para entregar ao cliente.` });
+    } catch (e) {
+      toast({ title: 'Não foi possível baixar o DANFSe', description: e.message, variant: 'destructive' });
     } finally {
       setOcupado(null);
     }
@@ -140,7 +152,7 @@ export default function NFe() {
     try {
       const r = await verificarNotaPresa({
         nfeId: nota.id, idDps,
-        producao: company?.nfe_environment === 'producao',
+        producao: producaoDaNota(nota, company),
       });
       toast(r.existe
         ? { title: 'A nota existe no Sefin', description: `Chave ${r.chaveAcesso}. O registro foi atualizado.` }
@@ -359,6 +371,13 @@ export default function NFe() {
                       <div className="text-right flex-shrink-0">
                         <p className="font-bold text-gray-900">{formatCurrency(nota.total_amount)}</p>
                         <div className="flex gap-1 mt-1 items-center justify-end flex-wrap">
+                          {ehNfse && nota.status === 'autorizada' && nota.number && noDesktop && (
+                            <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-emerald-700 hover:bg-emerald-50"
+                              title="PDF da nota (DANFSe) para entregar ao cliente"
+                              disabled={ocupado === nota.id} onClick={() => danfse(nota)}>
+                              <FileDown className="w-3 h-3 mr-1" />DANFSe
+                            </Button>
+                          )}
                           {(nota.xml_content || nota.xml_dps) && (
                             <Button size="sm" variant="ghost" className="h-7 px-2 text-xs"
                               title="XML da nota — é o que vale como documento"

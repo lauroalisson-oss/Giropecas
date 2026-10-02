@@ -17,7 +17,7 @@
 // para o provedor, nem para lugar nenhum.
 
 import { base44 } from '@/api/base44Client';
-export { pendenciasNfse, nfseNoMes, idDpsDaNota, escolherXml, MODELO_LABEL } from './nfse-dados';
+export { pendenciasNfse, nfseNoMes, idDpsDaNota, escolherXml, producaoDaNota, MODELO_LABEL } from './nfse-dados';
 import { escolherXml } from './nfse-dados';
 
 // A ponte é injetada pelo aplicativo desktop (preload.js). Num navegador
@@ -125,11 +125,28 @@ export async function consultarNaSefin(chaveAcesso, producao = false) {
   return r.dados;
 }
 
-// Baixa o XML da nota. A escolha de qual documento e o nome do arquivo
-// ficam em nfse-dados.js (puro); aqui sobra só o empurrão no navegador.
-export function baixarXml(nota, qual = 'nfse') {
-  const { conteudo, nome } = escolherXml(nota, qual);
-  const url = URL.createObjectURL(new Blob([conteudo], { type: 'application/xml' }));
+// Baixa o DANFSe (o PDF da nota) pelo aplicativo. Também precisa da
+// ponte: o Ambiente Nacional só entrega com o certificado da oficina.
+export const AVISO_ATUALIZAR_APP =
+  'Seu aplicativo GiroPeças é de uma versão sem o DANFSe. Baixe a versão nova em '
+  + 'Configurações → Fiscal e instale por cima — o certificado continua salvo.';
+
+export async function baixarDanfse(nota, producao = false) {
+  const ponte = ponteDesktop();
+  if (!ponte) throw new Error(AVISO_SEM_PONTE);
+  if (typeof ponte.baixarDanfse !== 'function') throw new Error(AVISO_ATUALIZAR_APP);
+  const r = await ponte.baixarDanfse({ chaveAcesso: nota.number, producao });
+  if (!r?.ok) throw new Error(r?.erro || 'Não foi possível baixar o DANFSe.');
+  const binario = atob(r.dados.pdfBase64);
+  const bytes = new Uint8Array(binario.length);
+  for (let i = 0; i < binario.length; i++) bytes[i] = binario.charCodeAt(i);
+  const nome = `DANFSe-${String(nota.number).slice(-15)}.pdf`;
+  baixarArquivo(new Blob([bytes], { type: 'application/pdf' }), nome);
+  return nome;
+}
+
+function baixarArquivo(blob, nome) {
+  const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
   a.download = nome;
@@ -138,6 +155,13 @@ export function baixarXml(nota, qual = 'nfse') {
   a.remove();
   // Devolve a memória do blob depois que o navegador começou o download.
   setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+
+// Baixa o XML da nota. A escolha de qual documento e o nome do arquivo
+// ficam em nfse-dados.js (puro); aqui sobra só o empurrão no navegador.
+export function baixarXml(nota, qual = 'nfse') {
+  const { conteudo, nome } = escolherXml(nota, qual);
+  baixarArquivo(new Blob([conteudo], { type: 'application/xml' }), nome);
   return nome;
 }
 

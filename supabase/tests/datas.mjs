@@ -81,5 +81,34 @@ ok(competenciaDe('2026-10-01') === '2026-10', 'outubro fica em outubro');
 ok(competenciaDe('2026-10-01T00:30:00Z') === (noBrasil ? '2026-09' : '2026-10'),
   'OS fechada as 21h30 de 30/09 e comissao de setembro');
 
+
+console.log('--- Ninguem volta a calcular "hoje" em UTC ---');
+// Foi corrigido em 27 lugares do sistema e voltou num TESTE (compras.mjs),
+// que passou a falhar toda noite depois das 21h. Vale para codigo e testes.
+{
+  const { readdirSync, readFileSync } = await import('node:fs');
+  const path = await import('node:path');
+  const raiz = new URL('../../', import.meta.url).pathname;
+  const achados = [];
+  const andar = (dir) => {
+    for (const n of readdirSync(dir, { withFileTypes: true })) {
+      if (['node_modules', 'dist', '.git', 'app'].includes(n.name)) continue;
+      const p = path.join(dir, n.name);
+      if (n.isDirectory()) andar(p);
+      else if (/\.(jsx?|mjs|cjs)$/.test(n.name)) {
+        readFileSync(p, 'utf8').split('\n').forEach((linha, i) => {
+          // Comentario que documenta o jeito antigo nao conta.
+          if (/^\s*(\/\/|\*)/.test(linha)) return;
+          if (/toISOString\(\)\.split\(['"]T['"]\)\[0\]/.test(linha)) achados.push(`${path.relative(raiz, p)}:${i + 1}`);
+        });
+      }
+    }
+  };
+  for (const d of ['src', 'api', 'shared', 'supabase/tests']) andar(path.join(raiz, d));
+  // A unica permitida: a linha desta suite que reproduz o jeito antigo.
+  const fora = achados.filter(a => !a.startsWith('supabase/tests/datas.mjs'));
+  ok(fora.length === 0, `nenhum "hoje" em UTC no codigo nem nos testes${fora.length ? ': ' + fora.join(', ') : ''}`);
+}
+
 console.log(f === 0 ? '\n✅ DATAS OK' : `\n❌ ${f} falha(s)`);
 process.exit(f ? 1 : 0);

@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
 import { useCompany } from '@/lib/CompanyContext';
 import { maskCPF, maskCNPJ, maskPhone } from '@/lib/formatters';
+import { buscarCep, cepValido, camposDoCep } from '@/lib/cep';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -16,7 +17,8 @@ import StatusCrediario from '@/components/StatusCrediario';
 
 const EMPTY = {
   name: '', type: 'fisica', tax_id: '', birth_date: '', phone: '', email: '',
-  address: '', city: '', state: '', zip_code: '', credit_limit: 0,
+  address: '', address_number: '', neighborhood: '', address_complement: '', city_ibge_code: '',
+  city: '', state: '', zip_code: '', credit_limit: 0,
   notes: '', is_active: true, lgpd_consent: false
 };
 
@@ -39,13 +41,26 @@ export default function ClienteForm() {
     setLoading(true);
     try {
       const data = await base44.entities.Customer.get(id);
-      setForm(data);
+      // Cliente antigo não tem os campos novos de endereço (vêm nulos do
+      // banco): parte do formulário vazio para os campos não ficarem sem valor.
+      setForm({ ...EMPTY, ...Object.fromEntries(Object.entries(data || {}).filter(([, v]) => v !== null)) });
     } finally {
       setLoading(false);
     }
   };
 
   const set = (field, value) => setForm(prev => ({ ...prev, [field]: value }));
+
+  // CEP → cidade, UF, código IBGE (e rua/bairro, se vazios). Ver lib/cep.js.
+  const [cepStatus, setCepStatus] = useState(null);
+  const consultarCep = async () => {
+    if (!cepValido(form.zip_code)) return;
+    setCepStatus({ texto: 'Buscando o CEP...' });
+    const r = await buscarCep(form.zip_code);
+    if (r.erro) { setCepStatus({ erro: true, texto: r.erro }); return; }
+    setForm(prev => ({ ...prev, ...camposDoCep(prev, r) }));
+    setCepStatus({ texto: `CEP de ${r.cidade}/${r.uf}.` });
+  };
 
   const handleTaxId = (v) => {
     if (form.type === 'juridica') set('tax_id', maskCNPJ(v));
@@ -59,7 +74,12 @@ export default function ClienteForm() {
     }
     setSaving(true);
     try {
-      const payload = { ...form, company_id: company.id };
+      const payload = {
+        ...form, company_id: company.id,
+        // Vazio vai como nulo: o banco só aceita 7 dígitos ou nada, e um ''
+        // faria recusar o cadastro de quem não informou CEP.
+        city_ibge_code: cepValido(form.zip_code) && /^\d{7}$/.test(form.city_ibge_code || '') ? form.city_ibge_code : null,
+      };
       if (isEdit) {
         await base44.entities.Customer.update(id, payload);
         toast({ title: 'Cliente atualizado com sucesso!' });
@@ -140,26 +160,53 @@ export default function ClienteForm() {
         <Card>
           <CardHeader className="pb-3"><CardTitle className="text-sm">Endereço</CardTitle></CardHeader>
           <CardContent className="space-y-4">
+            {/* O CEP preenche cidade, UF e o código IBGE (o que a NFS-e usa
+                para dizer a cidade) — ver lib/cep.js. Rua e bairro só
+                preenchem se estiverem vazios. */}
             <div className="grid grid-cols-3 gap-4">
-              <div className="col-span-2">
-                <Label>Endereço</Label>
-                <Input className="mt-1" value={form.address} onChange={e => set('address', e.target.value)} placeholder="Rua, número" />
-              </div>
               <div>
                 <Label>CEP</Label>
-                <Input className="mt-1" value={form.zip_code} onChange={e => set('zip_code', e.target.value)} placeholder="00000-000" />
+                <Input className="mt-1" value={form.zip_code} onChange={e => set('zip_code', e.target.value)}
+                  onBlur={consultarCep} placeholder="00000-000" />
+              </div>
+              <div className="col-span-2">
+                <Label>Rua</Label>
+                <Input className="mt-1" value={form.address} onChange={e => set('address', e.target.value)} placeholder="Rua, avenida..." />
+              </div>
+            </div>
+            {cepStatus && (
+              <p className={`text-xs ${cepStatus.erro ? 'text-amber-700' : 'text-gray-500'}`}>{cepStatus.texto}</p>
+            )}
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <Label>Número</Label>
+                <Input className="mt-1" value={form.address_number} onChange={e => set('address_number', e.target.value)} placeholder="S/N se não houver" />
+              </div>
+              <div>
+                <Label>Bairro</Label>
+                <Input className="mt-1" value={form.neighborhood} onChange={e => set('neighborhood', e.target.value)} />
+              </div>
+              <div>
+                <Label>Complemento</Label>
+                <Input className="mt-1" value={form.address_complement} onChange={e => set('address_complement', e.target.value)} />
               </div>
             </div>
             <div className="grid grid-cols-3 gap-4">
               <div className="col-span-2">
                 <Label>Cidade</Label>
-                <Input className="mt-1" value={form.city} onChange={e => set('city', e.target.value)} />
+                {/* Mudar a cidade à mão invalida o IBGE vindo do CEP. */}
+                <Input className="mt-1" value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value, city_ibge_code: '' }))} />
               </div>
               <div>
                 <Label>UF</Label>
                 <Input className="mt-1" value={form.state} onChange={e => set('state', e.target.value)} maxLength={2} />
               </div>
             </div>
+            <p className="text-xs text-gray-500">
+              {form.city_ibge_code
+                ? <>Município para a nota fiscal: {form.city || '—'}/{form.state || '—'} — IBGE {form.city_ibge_code}</>
+                : 'Sem código IBGE: a nota fiscal sai sem o endereço do cliente. Informe o CEP para completar.'}
+            </p>
           </CardContent>
         </Card>
 

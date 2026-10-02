@@ -131,6 +131,32 @@ for (const [nome, perfil] of Object.entries(PERFIS)) {
   }
 }
 
+console.log('--- Certificado: navegador x aplicativo ---');
+// A oficina abriu Configurações no navegador e procurava o campo do
+// certificado. O quadro tem de dizer COMO chegar ao aplicativo; e, dentro
+// dele, mostrar o formulário.
+{
+  globalThis.__PERFIL_TELA = PERFIS.fiscal;
+  const desenhar = async () => {
+    const mod = await vite.ssrLoadModule(path.join(RAIZ, 'src/pages/Configuracoes.jsx'));
+    return renderToString(React.createElement(QueryClientProvider, { client: new QueryClient() },
+      React.createElement(MemoryRouter, null, React.createElement(mod.default))));
+  };
+  delete globalThis.giropecasNFSe;
+  const noNavegador = await desenhar();
+  ok(/Você está no navegador/.test(noNavegador), 'no navegador: diz que está no navegador');
+  ok(/baixe e instale o aplicativo/.test(noNavegador), 'e dá o link para baixar o aplicativo');
+  ok(noNavegador.includes(`>${globalThis.location.host}<`), 'e mostra o endereço exato a digitar no aplicativo');
+  ok(!/neste computador\)/.test(noNavegador), 'e não finge ter o formulário');
+
+  // Como o preload.js do aplicativo expõe a ponte.
+  globalThis.giropecasNFSe = { disponivel: true, situacaoCertificado: async () => ({ ok: true, dados: { configurado: false } }) };
+  const noApp = await desenhar();
+  ok(/neste computador/.test(noApp), 'no aplicativo: o quadro do certificado DESTE computador');
+  ok(!/Você está no navegador/.test(noApp), 'sem o aviso de navegador');
+  delete globalThis.giropecasNFSe;
+}
+
 console.error = erroOriginal;
 await vite.close();
 

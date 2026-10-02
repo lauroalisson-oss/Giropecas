@@ -31,17 +31,15 @@ const base = {
   justificativa: 'Valor do servico lancado errado na ordem',
 };
 
-console.log('--- Id do evento (62 caracteres) ---');
+console.log('--- Id do evento (59 caracteres, padrao PRE[0-9]{56} do XSD) ---');
 const id = montarIdEvento({ chaveAcesso: CHAVE50 });
-ok(id.length === 62, `Id com 62 caracteres (deu ${id.length})`);
+ok(id.length === 59, `Id com 59 caracteres (deu ${id.length})`);
+ok(/^PRE[0-9]{56}$/.test(id), 'casa com o padrao do XSD');
 ok(id.startsWith('PRE'), 'comeca com PRE');
 ok(id.slice(3, 53) === CHAVE50, 'carrega a chave de acesso inteira');
 ok(id.slice(53, 59) === TIPO_EVENTO_CANCELAMENTO, 'tipo do evento 101101');
-ok(id.slice(59) === '001', 'sequencia com 3 digitos');
-ok(montarIdEvento({ chaveAcesso: CHAVE50, sequencia: 12 }).slice(59) === '012', 'sequencia 12 vira 012');
 recusa(() => montarIdEvento({ chaveAcesso: '123' }), 'chave curta');
 recusa(() => montarIdEvento({ chaveAcesso: CHAVE50 + '9' }), 'chave longa');
-recusa(() => montarIdEvento({ chaveAcesso: CHAVE50, sequencia: 1000 }), 'sequencia acima de 999');
 // A chave e longa; o lojista pode cola-la com espacos ou pontos.
 const comEspacos = CHAVE50.replace(/(.{4})/g, '$1 ').trim();
 ok(montarIdEvento({ chaveAcesso: comEspacos }) === id, 'chave colada com espacos da o mesmo Id');
@@ -56,7 +54,8 @@ ok(tag(p.xml, 'tpAmb') === '2', 'homologacao = tpAmb 2');
 ok(montarCancelamento({ ...base, producao: true }).xml.includes('<tpAmb>1</tpAmb>'), 'producao = tpAmb 1');
 ok(tag(p.xml, 'chNFSe') === CHAVE50, 'chave da nota que sera cancelada');
 ok(tag(p.xml, 'CNPJAutor') === '12345678000199', 'CNPJ do autor sem pontuacao');
-ok(tag(p.xml, 'nPedRegEvento') === '1', 'numero do pedido');
+// O leiaute atual nao tem mais o numero do pedido; com ele, o schema recusa.
+ok(!p.xml.includes('nPedRegEvento'), 'sem nPedRegEvento (saiu do leiaute)');
 ok(tag(p.xml, 'cMotivo') === '1', 'codigo do motivo');
 ok(tag(p.xml, 'xDesc') === 'Cancelamento de NFS-e', 'descricao do evento');
 ok(p.xml.includes('<e101101>'), 'bloco do evento e101101');
@@ -68,7 +67,7 @@ new DOMParser({ onError: (l, m) => { if (l !== 'warning') erro = m; } }).parseFr
 ok(!erro, 'XML valido' + (erro ? ': ' + erro : ''));
 
 console.log('--- Ordem dos elementos (o XSD valida sequencia) ---');
-const ordem = ['tpAmb', 'verAplic', 'dhEvento', 'CNPJAutor', 'chNFSe', 'nPedRegEvento', 'e101101'];
+const ordem = ['tpAmb', 'verAplic', 'dhEvento', 'CNPJAutor', 'chNFSe', 'e101101'];
 let pos = -1, ordemOk = true;
 for (const t of ordem) { const i = p.xml.indexOf(`<${t}>`); if (i < pos) ordemOk = false; pos = i; }
 ok(ordemOk, 'elementos de infPedReg na ordem do layout');

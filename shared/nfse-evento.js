@@ -4,19 +4,21 @@
 // continua existindo, agora com a marca de cancelada — é assim que o
 // fisco enxerga, e é assim que o contador precisa ver.
 //
-// O que está CONFIRMADO no manual oficial do Sefin Nacional
-// (manual-contribuintes-emissor-publico-api v1.2, out/2025):
-//   - endpoint POST /nfse/{chaveAcesso}/eventos
-//   - o evento de cancelamento é o e101101
-//   - a ordem dos elementos de infPedReg (abaixo)
+// Conferido contra os XSD oficiais (pedRegEvento_v1.00.xsd e
+// tiposEventos_v1.00.xsd, cópia em supabase/tests/_xsd/) — e o teste
+// nfse_xsd.mjs valida o XML montado aqui contra eles:
+//   - endpoint POST /nfse/{chaveAcesso}/eventos (manual da API v1.2)
+//   - infPedReg: tpAmb, verAplic, dhEvento, CNPJAutor|CPFAutor, chNFSe, e101101
+//   - Id = "PRE" + chave de acesso (50) + tipo do evento (6) = 59
 //   - cMotivo: 1 = erro na emissão | 2 = serviço não prestado | 9 = outros
+//   - xMotivo: de 15 a 255 caracteres
 //
-// O que foi montado a partir de exemplos publicados, e por isso precisa
-// passar por HOMOLOGAÇÃO antes de valer em produção:
-//   - a composição exata do Id (PRE + chave + tipo + sequência = 62)
-//   - o nome do campo JSON do corpo (pedidoRegistroEventoXmlGZipB64)
-// Se o Sefin recusar, o código do erro dirá qual dos dois está errado —
-// e o conserto é de uma linha em cada caso.
+// Na versão anterior do leiaute o Id levava também uma sequência de 3 dígitos (62) e o XML
+// um <nPedRegEvento>. O Sefin tirou os dois do leiaute; com eles, todo
+// pedido de cancelamento seria recusado na validação do schema.
+//
+// Ainda sem conferência oficial: o nome do campo JSON do corpo
+// (pedidoRegistroEventoXmlGZipB64). Se o Sefin recusar, o erro dirá.
 
 import { dataHoraDaOficina } from './relogio-fiscal.js';
 
@@ -37,19 +39,17 @@ function esc(texto) {
 }
 
 /**
- * Id do pedido de registro de evento: 62 caracteres.
- * "PRE" + chave de acesso (50) + tipo do evento (6) + sequência (3).
+ * Id do pedido de registro de evento: 59 caracteres.
+ * "PRE" + chave de acesso (50) + tipo do evento (6). Padrão do XSD:
+ * PRE[0-9]{56}.
  */
-export function montarIdEvento({ chaveAcesso, tipoEvento = TIPO_EVENTO_CANCELAMENTO, sequencia = 1 }) {
+export function montarIdEvento({ chaveAcesso, tipoEvento = TIPO_EVENTO_CANCELAMENTO }) {
   const chave = dig(chaveAcesso);
   if (chave.length !== 50) {
     throw new Error(`Chave de acesso da NFS-e inválida: esperado 50 dígitos, veio ${chave.length}.`);
   }
-  const seq = String(Number(sequencia) || 1);
-  if (seq.length > 3) throw new Error('Sequência do evento acima de 999.');
-
-  const id = 'PRE' + chave + dig(tipoEvento).padStart(6, '0') + seq.padStart(3, '0');
-  if (id.length !== 62) throw new Error(`Id do evento ficou com ${id.length} caracteres (esperado 62).`);
+  const id = 'PRE' + chave + dig(tipoEvento).padStart(6, '0');
+  if (!/^PRE[0-9]{56}$/.test(id)) throw new Error(`Id do evento ficou fora do padrão (${id.length} caracteres, esperado 59).`);
   return id;
 }
 
@@ -62,12 +62,11 @@ export function montarIdEvento({ chaveAcesso, tipoEvento = TIPO_EVENTO_CANCELAME
  * @param {number} p.motivo       1 | 2 | 9
  * @param {string} p.justificativa texto livre do lojista
  * @param {boolean} p.producao
- * @param {number} p.sequencia    nº do pedido para esta nota
  * @param {string} p.uf           estado da oficina (define o fuso de dhEvento)
  */
 export function montarCancelamento({
   chaveAcesso, cnpjAutor, motivo = 1, justificativa = '',
-  producao = false, sequencia = 1, agora = new Date(), uf,
+  producao = false, agora = new Date(), uf,
 }) {
   const doc = dig(cnpjAutor);
   if (doc.length !== 11 && doc.length !== 14) {
@@ -89,7 +88,7 @@ export function montarCancelamento({
     throw new Error('A justificativa do cancelamento passa de 255 caracteres.');
   }
 
-  const id = montarIdEvento({ chaveAcesso, sequencia });
+  const id = montarIdEvento({ chaveAcesso });
 
   // A ordem dos elementos é definida pelo XSD e NÃO pode mudar.
   const partes = [];
@@ -102,7 +101,6 @@ export function montarCancelamento({
   partes.push(`<dhEvento>${dataHoraDaOficina(agora, uf)}</dhEvento>`);
   partes.push(doc.length === 14 ? `<CNPJAutor>${doc}</CNPJAutor>` : `<CPFAutor>${doc}</CPFAutor>`);
   partes.push(`<chNFSe>${dig(chaveAcesso)}</chNFSe>`);
-  partes.push(`<nPedRegEvento>${Number(sequencia) || 1}</nPedRegEvento>`);
   partes.push('<e101101>');
   partes.push('<xDesc>Cancelamento de NFS-e</xDesc>');
   partes.push(`<cMotivo>${cod}</cMotivo>`);

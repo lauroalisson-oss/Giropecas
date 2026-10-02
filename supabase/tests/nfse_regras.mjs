@@ -68,12 +68,12 @@ ok(checarOrdem(comServico, { id: 'n3', status: 'validando' }) === null, 'nota pr
 ok(checarOrdem(comServico, { id: 'n4', status: 'cancelada' }) === null, 'apos cancelamento pode emitir outra');
 
 console.log('--- Recorte do mes ---');
-const inicio = inicioDoMes(new Date('2026-09-20T23:30:00'));
-ok(inicio.getDate() === 1 && inicio.getMonth() === 8, 'volta para o dia 1 de setembro');
-ok(inicio.getHours() === 0 && inicio.getMinutes() === 0 && inicio.getSeconds() === 0,
-  'comeca a zero hora (nota do dia 1 de manha conta no mes)');
-const virada = inicioDoMes(new Date('2026-01-31T23:59:59'));
-ok(virada.getMonth() === 0 && virada.getDate() === 1, 'dia 31 continua no mes dele');
+// No relogio da oficina, nao no do servidor (UTC) — ver relogio_fiscal.mjs.
+const inicio = inicioDoMes(new Date('2026-09-20T23:30:00-03:00'), 'BA');
+ok(inicio.toISOString() === '2026-09-01T03:00:00.000Z',
+  'volta para 01/09 a zero hora de Brasilia (nota do dia 1 de manha conta no mes)');
+const virada = inicioDoMes(new Date('2026-01-31T23:59:59-03:00'), 'BA');
+ok(virada.toISOString() === '2026-01-01T03:00:00.000Z', 'dia 31 as 23h59 continua no mes dele');
 
 console.log(f === 0 ? '\n✅ REGRAS DE EMISSAO OK' : `\n❌ ${f} falha(s)`);
 process.exit(f ? 1 : 0);

@@ -9,6 +9,7 @@
 // digitar. Duas implementações divergiriam, e a divergência só
 // apareceria na hora de emitir a nota.
 import { codigoTributacaoNacional, descricaoCTribNac } from '../../shared/ctribnac.js';
+import { dataDaOficina, dataHoraDaOficina } from '../../shared/relogio-fiscal.js';
 export { codigoTributacaoNacional, descricaoCTribNac };
 
 export const NS_NFSE = 'http://www.sped.fazenda.gov.br/nfse';
@@ -59,19 +60,10 @@ function esc(texto) {
 // Valores monetários vão com 2 casas, ponto decimal e sem separador de milhar.
 const money = (v) => (Math.round((Number(v) || 0) * 100) / 100).toFixed(2);
 
-// Data/hora com fuso, exigida em dhEmi.
-export function dataHoraComFuso(d = new Date()) {
-  const p = (n) => String(n).padStart(2, '0');
-  const off = -d.getTimezoneOffset();
-  const sinal = off >= 0 ? '+' : '-';
-  const abs = Math.abs(off);
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
-    + `T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
-    + `${sinal}${p(Math.floor(abs / 60))}:${p(abs % 60)}`;
-}
-
-export const dataSimples = (d = new Date()) =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+// Data e hora no relógio da OFICINA (pelo estado dela), não no do
+// servidor — a Vercel roda em UTC. Ver shared/relogio-fiscal.js.
+export const dataHoraComFuso = (d = new Date(), uf) => dataHoraDaOficina(d, uf);
+export const dataSimples = (d = new Date(), uf) => dataDaOficina(d, uf);
 
 // Regime no Simples Nacional, conforme o cadastro da empresa.
 // 1 = optante MEI | 2 = optante ME/EPP | 3 = não optante
@@ -146,11 +138,13 @@ export function montarDps({ empresa, cliente, servicos = [], numero, serie = '1'
   partes.push(`<DPS xmlns="${NS_NFSE}" versao="1.00">`);
   partes.push(`<infDPS Id="${id}">`);
   partes.push(`<tpAmb>${producao ? '1' : '2'}</tpAmb>`);
-  partes.push(`<dhEmi>${dataHoraComFuso(agora)}</dhEmi>`);
+  partes.push(`<dhEmi>${dataHoraComFuso(agora, empresa?.state)}</dhEmi>`);
   partes.push(`<verAplic>GiroPecas-1.0</verAplic>`);
   partes.push(`<serie>${dig(serie).padStart(5, '0')}</serie>`);
   partes.push(`<nDPS>${dig(numero) || '1'}</nDPS>`);
-  partes.push(`<dCompet>${dataSimples(agora)}</dCompet>`);
+  // Competência = o dia do serviço na oficina. Com o relógio do servidor,
+  // nota das 21h em diante saía no dia (e às vezes no mês) seguinte.
+  partes.push(`<dCompet>${dataSimples(agora, empresa?.state)}</dCompet>`);
   partes.push(`<tpEmit>1</tpEmit>`);
   partes.push(`<cLocEmi>${municipio}</cLocEmi>`);
 

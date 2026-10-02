@@ -18,6 +18,8 @@
 // Se o Sefin recusar, o código do erro dirá qual dos dois está errado —
 // e o conserto é de uma linha em cada caso.
 
+import { dataHoraDaOficina } from './relogio-fiscal.js';
+
 export const TIPO_EVENTO_CANCELAMENTO = '101101';
 
 export const MOTIVOS_CANCELAMENTO = {
@@ -32,16 +34,6 @@ function esc(texto) {
   return String(texto ?? '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&apos;');
-}
-
-function dataHoraComFuso(d = new Date()) {
-  const p = (n) => String(n).padStart(2, '0');
-  const off = -d.getTimezoneOffset();
-  const sinal = off >= 0 ? '+' : '-';
-  const abs = Math.abs(off);
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
-    + `T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
-    + `${sinal}${p(Math.floor(abs / 60))}:${p(abs % 60)}`;
 }
 
 /**
@@ -71,10 +63,11 @@ export function montarIdEvento({ chaveAcesso, tipoEvento = TIPO_EVENTO_CANCELAME
  * @param {string} p.justificativa texto livre do lojista
  * @param {boolean} p.producao
  * @param {number} p.sequencia    nº do pedido para esta nota
+ * @param {string} p.uf           estado da oficina (define o fuso de dhEvento)
  */
 export function montarCancelamento({
   chaveAcesso, cnpjAutor, motivo = 1, justificativa = '',
-  producao = false, sequencia = 1, agora = new Date(),
+  producao = false, sequencia = 1, agora = new Date(), uf,
 }) {
   const doc = dig(cnpjAutor);
   if (doc.length !== 11 && doc.length !== 14) {
@@ -105,7 +98,8 @@ export function montarCancelamento({
   partes.push(`<infPedReg Id="${id}">`);
   partes.push(`<tpAmb>${producao ? '1' : '2'}</tpAmb>`);
   partes.push('<verAplic>GiroPecas-1.0</verAplic>');
-  partes.push(`<dhEvento>${dataHoraComFuso(agora)}</dhEvento>`);
+  // Hora da oficina, não a do servidor (UTC). Ver relogio-fiscal.js.
+  partes.push(`<dhEvento>${dataHoraDaOficina(agora, uf)}</dhEvento>`);
   partes.push(doc.length === 14 ? `<CNPJAutor>${doc}</CNPJAutor>` : `<CPFAutor>${doc}</CPFAutor>`);
   partes.push(`<chNFSe>${dig(chaveAcesso)}</chNFSe>`);
   partes.push(`<nPedRegEvento>${Number(sequencia) || 1}</nPedRegEvento>`);

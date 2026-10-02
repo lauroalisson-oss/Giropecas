@@ -67,7 +67,7 @@ export default async function handler(req, res) {
 
     // --- Passo 1: montar o pedido ----------------------------------------
     const { data: empresa } = await supabase
-      .from('companies').select('cnpj, nfe_environment').eq('id', perfil.company_id).maybeSingle();
+      .from('companies').select('cnpj, state, nfe_environment').eq('id', perfil.company_id).maybeSingle();
     if (!empresa?.cnpj) return erro(res, 400, 'CNPJ da oficina não configurado.');
 
     const producao = empresa.nfe_environment === 'producao';
@@ -77,6 +77,7 @@ export default async function handler(req, res) {
       motivo,
       justificativa,
       producao,
+      uf: empresa.state,
       // Sempre 1: um pedido recusado não é registrado, então não consome
       // a sequência; e um pedido aceito cancela a nota, que a partir daí
       // não aceita outro cancelamento.

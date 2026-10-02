@@ -138,9 +138,13 @@ jobs:
         with:
           name: giropecas-instalador
 
+      # "instalador-v1.0.2" -> "1.0.2": o título saía "instalador instalador-v1.0.2".
+      - id: versao
+        run: echo "numero=${GITHUB_REF_NAME#instalador-v}" >> "$GITHUB_OUTPUT"
+
       - uses: softprops/action-gh-release@v2
         with:
-          name: GiroPeças — instalador ${{ github.ref_name }}
+          name: Instalador GiroPeças ${{ steps.versao.outputs.numero }}
           files: Giropecas-Setup-*.exe
           body: |
             Instalador do aplicativo GiroPeças para Windows.

@@ -70,12 +70,34 @@ await confere(montarDps({
   numero: 999999999999999, serie: '49999',
 }).xml, DPS, 'vários serviços, número e série no máximo');
 
-// O código municipal é digitado pelo lojista. O schema aceita 3 dígitos;
-// esta é a recusa que ele veria — fica registrada aqui.
-const codigoLongo = await valida(montarDps({
-  empresa, servicos: [{ ...servicos[0], servico: { ...oleo, municipal_service_code: '1401' } }], numero: 5,
-}).xml, DPS);
-ok(!codigoLongo.valido && /cTribMun/.test(codigoLongo.erros.join()), 'código municipal com 4 dígitos é recusado pelo schema');
+// O código municipal é digitado pelo lojista e o schema só aceita 3
+// dígitos. Errado, o Sefin devolveria erro de schema sem dizer o campo;
+// agora a montagem para antes, dizendo o que corrigir.
+let erroCodigo = null;
+try {
+  montarDps({ empresa, servicos: [{ ...servicos[0], servico: { ...oleo, municipal_service_code: '14.01' } }], numero: 5 });
+} catch (e) { erroCodigo = e.message; }
+ok(/3 dígitos/.test(erroCodigo || ''), 'código municipal "14.01" é barrado antes do Sefin, com o motivo');
+
+console.log('--- Cadastro "sujo" sai dentro do schema ---');
+// O que o lojista digita no celular: travessão e aspas curvas, emoji,
+// espaço sobrando, telefone sem DDD, e-mail errado, texto longo demais.
+const sujo = {
+  ...cliente,
+  name: '  Maria “Mecânica” 🚗  ',
+  address: 'Rua São José – trecho 2  ', address_number: ' 10 ', neighborhood: 'Centro\tHistórico',
+  address_complement: '😀', phone: '9999', email: 'maria@',
+};
+const dpsSuja = montarDps({
+  empresa: { ...empresa, im: '123.456.789/0001-1' },
+  cliente: sujo,
+  servicos: [{ description: 'Revisão – completa “premium” '.repeat(80), total_price: 300, servico: oleo }],
+  numero: 7,
+}).xml;
+await confere(dpsSuja, DPS, 'nomes com aspas curvas, travessão, emoji, IM com pontuação, descrição de 2.400 caracteres');
+ok(!dpsSuja.includes('<fone>') && !dpsSuja.includes('<email>'), 'telefone curto e e-mail inválido ficam de fora (são opcionais)');
+ok(!dpsSuja.includes('<xCpl>'), 'complemento que era só emoji fica de fora');
+ok(dpsSuja.includes('<xLgr>Rua São José - trecho 2</xLgr>'), 'travessão vira hífen, acento fica');
 
 console.log('--- DPS assinada (como sai do aplicativo) ---');
 const cert = lerCertificado(garantir().pfx, 'senha123');

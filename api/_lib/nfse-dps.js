@@ -10,6 +10,9 @@
 // apareceria na hora de emitir a nota.
 import { codigoTributacaoNacional, descricaoCTribNac } from '../../shared/ctribnac.js';
 import { dataDaOficina, dataHoraDaOficina } from '../../shared/relogio-fiscal.js';
+import {
+  textoLeiaute, telefoneLeiaute, emailLeiaute, codigoTributacaoMunicipal, inscricaoMunicipal, descricaoServico,
+} from '../../shared/nfse-campos.js';
 export { codigoTributacaoNacional, descricaoCTribNac };
 
 export const NS_NFSE = 'http://www.sped.fazenda.gov.br/nfse';
@@ -87,11 +90,13 @@ export function enderecoDoTomador(cliente) {
   const c = cliente || {};
   const cMun = dig(c.city_ibge_code);
   const cep = dig(c.zip_code);
-  const logradouro = String(c.address || '').trim();
-  const numero = String(c.address_number || '').trim();
-  const bairro = String(c.neighborhood || '').trim();
+  // Nos limites do leiaute (TSString): o que o schema recusaria é limpo
+  // aqui, e se sobrar vazio o endereço é tratado como incompleto.
+  const logradouro = textoLeiaute(c.address, 255);
+  const numero = textoLeiaute(c.address_number, 60);
+  const bairro = textoLeiaute(c.neighborhood, 60);
   if (cMun.length !== 7 || cep.length !== 8 || !logradouro || !numero || !bairro) return null;
-  return { cMun, cep, logradouro, numero, bairro, complemento: String(c.address_complement || '').trim() };
+  return { cMun, cep, logradouro, numero, bairro, complemento: textoLeiaute(c.address_complement, 156) };
 }
 
 /**
@@ -108,7 +113,8 @@ export function enderecoDoTomador(cliente) {
 export function montarDps({ empresa, cliente, servicos = [], numero, serie = '1', producao = false, agora = new Date() }) {
   const cnpj = dig(empresa?.cnpj);
   if (!cnpj) throw new Error('CNPJ da oficina não configurado.');
-  if (!empresa?.im) throw new Error('Inscrição Municipal não configurada (obrigatória para NFS-e).');
+  const inscricao = inscricaoMunicipal(empresa?.im);
+  if (inscricao.erro) throw new Error(inscricao.erro);
 
   const municipio = dig(empresa?.city_ibge_code);
   const id = montarIdDps({ codigoMunicipio: municipio, cnpjCpf: cnpj, serie, numero });
@@ -123,16 +129,25 @@ export function montarDps({ empresa, cliente, servicos = [], numero, serie = '1'
       return h ? `${it.description} (${h}h)` : it.description;
     })
     .filter(Boolean).join(' | ') || 'Serviços prestados';
+  const xDescServ = descricaoServico(descricao);
 
   // Códigos e alíquota: do serviço que os tiver; senão, o padrão da empresa.
   const comCodigo = servicos.find(it => it.servico?.service_code_lc116);
   const lc116 = comCodigo?.servico?.service_code_lc116 || '14.01';
   const cTribNac = codigoTributacaoNacional(lc116);
-  const codMunicipal = servicos.find(it => it.servico?.municipal_service_code)?.servico?.municipal_service_code;
+  // Código municipal fora do padrão iria ao Sefin e voltaria como erro de
+  // schema, sem dizer qual campo. Aqui a mensagem diz o que corrigir.
+  const codMun = codigoTributacaoMunicipal(
+    servicos.find(it => it.servico?.municipal_service_code)?.servico?.municipal_service_code);
+  if (codMun.erro) throw new Error(codMun.erro);
+  const codMunicipal = codMun.codigo;
 
   const comAliquota = servicos.find(it => Number(it.servico?.iss_rate) > 0);
   const aliquota = Number(comAliquota?.servico?.iss_rate) || Number(empresa?.iss_rate) || 0;
   if (!aliquota) throw new Error('Alíquota de ISS não configurada (no serviço ou na empresa).');
+  // A LC 116 limita o ISS a 5% — e o campo do leiaute só tem um dígito
+  // inteiro. Acima disso é erro de digitação (ex.: 50 em vez de 5).
+  if (aliquota > 5) throw new Error(`Alíquota de ISS de ${aliquota}% acima do máximo legal de 5%. Confira o cadastro do serviço ou da oficina.`);
 
   const issRetido = servicos.some(it => it.servico?.iss_retido === true);
 
@@ -160,7 +175,7 @@ export function montarDps({ empresa, cliente, servicos = [], numero, serie = '1'
   // pelo CNPJ, e mandá-lo gera o erro E0121.
   partes.push(`<prest>`);
   partes.push(`<CNPJ>${cnpj}</CNPJ>`);
-  partes.push(`<IM>${esc(empresa.im)}</IM>`);
+  partes.push(`<IM>${esc(inscricao.im)}</IM>`);
   // A ordem é a do XSD: opSimpNac, regApTribSN, regEspTrib.
   const situacaoSN = opSimpNac(empresa);
   partes.push(`<regTrib><opSimpNac>${situacaoSN}</opSimpNac>`
@@ -171,7 +186,7 @@ export function montarDps({ empresa, cliente, servicos = [], numero, serie = '1'
   if (temTomador) {
     partes.push(`<toma>`);
     partes.push(tomadorCnpj ? `<CNPJ>${docTomador}</CNPJ>` : `<CPF>${docTomador}</CPF>`);
-    partes.push(`<xNome>${esc(cliente.name || 'Consumidor')}</xNome>`);
+    partes.push(`<xNome>${esc(textoLeiaute(cliente.name, 300) || 'Consumidor')}</xNome>`);
     // Endereço do tomador: opcional na NFS-e, e só vai COMPLETO.
     //
     // Ia sempre que o cliente tinha endereço ou cidade, e saía errado de
@@ -190,8 +205,12 @@ export function montarDps({ empresa, cliente, servicos = [], numero, serie = '1'
       partes.push(`<xBairro>${esc(end.bairro)}</xBairro>`);
       partes.push(`</end>`);
     }
-    if (cliente.phone) partes.push(`<fone>${dig(cliente.phone)}</fone>`);
-    if (cliente.email) partes.push(`<email>${esc(cliente.email)}</email>`);
+    // Opcionais: fora do formato do leiaute, ficam de fora em vez de
+    // derrubar a nota (telefone sem DDD curto demais, e-mail inválido).
+    const fone = telefoneLeiaute(cliente.phone);
+    const email = emailLeiaute(cliente.email);
+    if (fone) partes.push(`<fone>${fone}</fone>`);
+    if (email) partes.push(`<email>${esc(email)}</email>`);
     partes.push(`</toma>`);
   }
 
@@ -200,7 +219,7 @@ export function montarDps({ empresa, cliente, servicos = [], numero, serie = '1'
   partes.push(`<cServ>`);
   partes.push(`<cTribNac>${cTribNac}</cTribNac>`);
   if (codMunicipal) partes.push(`<cTribMun>${esc(codMunicipal)}</cTribMun>`);
-  partes.push(`<xDescServ>${esc(descricao)}</xDescServ>`);
+  partes.push(`<xDescServ>${esc(xDescServ)}</xDescServ>`);
   partes.push(`</cServ>`);
   partes.push(`</serv>`);
 

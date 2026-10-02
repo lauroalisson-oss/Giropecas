@@ -199,6 +199,9 @@ export default function Configuracoes() {
                       <SelectItem value="lucro_real">Lucro Real</SelectItem>
                     </SelectContent>
                   </Select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Simples Nacional vai na nota como ME/EPP, com o ISS no DAS. MEI ainda não emite NFS-e pelo GiroPeças.
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">

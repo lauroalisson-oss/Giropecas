@@ -9,6 +9,8 @@
 
 import { contexto, erro } from './_lib/contexto.js';
 import { montarCancelamento } from '../shared/nfse-evento.js';
+import { producaoDaNota } from '../shared/nfse-nota.js';
+import { dataHoraLegivel } from '../shared/relogio-fiscal.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return erro(res, 405, 'Método não permitido.');
@@ -35,7 +37,7 @@ export default async function handler(req, res) {
     // A RLS impede alcançar a nota de outra oficina.
     const { data: nota } = await supabase
       .from('nfe_records')
-      .select('id, status, number, model, notes')
+      .select('id, status, number, model, notes, xml_dps, xml_content')
       .eq('id', nfeId)
       .maybeSingle();
 
@@ -47,6 +49,9 @@ export default async function handler(req, res) {
     }
     if (!nota.number) return erro(res, 400, 'Nota sem chave de acesso — não há o que cancelar no Sefin.');
 
+    const { data: empresa } = await supabase
+      .from('companies').select('cnpj, state, nfe_environment').eq('id', perfil.company_id).maybeSingle();
+
     // --- Passo 3: guardar o resultado ------------------------------------
     if (confirmado || erroSefin) {
       if (erroSefin) {
@@ -57,7 +62,9 @@ export default async function handler(req, res) {
         .from('nfe_records')
         .update({
           status: 'cancelada',
-          notes: [nota.notes, `Cancelada em ${new Date().toLocaleString('pt-BR')}: ${justificativa || ''}`]
+          // Hora da oficina: toLocaleString no servidor (UTC) registrava
+          // o cancelamento das 21h como "00:00" do dia seguinte.
+          notes: [nota.notes, `Cancelada em ${dataHoraLegivel(new Date(), empresa?.state)}: ${justificativa || ''}`]
             .filter(Boolean).join('\n'),
         })
         .eq('id', nfeId);
@@ -66,11 +73,11 @@ export default async function handler(req, res) {
     }
 
     // --- Passo 1: montar o pedido ----------------------------------------
-    const { data: empresa } = await supabase
-      .from('companies').select('cnpj, state, nfe_environment').eq('id', perfil.company_id).maybeSingle();
     if (!empresa?.cnpj) return erro(res, 400, 'CNPJ da oficina não configurado.');
 
-    const producao = empresa.nfe_environment === 'producao';
+    // O ambiente é o da NOTA, não o atual da oficina: nota de homologação
+    // se cancela em homologação, mesmo com a oficina já em produção.
+    const producao = producaoDaNota(nota, empresa);
     const pedido = montarCancelamento({
       chaveAcesso: nota.number,
       cnpjAutor: empresa.cnpj,

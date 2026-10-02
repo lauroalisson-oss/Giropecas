@@ -130,6 +130,10 @@ console.log('--- No servidor, o relogio e o da oficina ---');
           if (/\.(getDate|getHours|getMonth|getFullYear|getDay|setHours|setDate|getTimezoneOffset)\(/.test(linha)) {
             achados.push(`${path.relative(raiz, p)}:${i + 1}`);
           }
+          // toLocaleString & cia. sem timeZone: formatam no fuso do servidor.
+          if (/\.toLocale(Date|Time)?String\(/.test(linha) && !/timeZone/.test(linha)) {
+            achados.push(`${path.relative(raiz, p)}:${i + 1} (toLocale sem timeZone)`);
+          }
         });
       }
     }

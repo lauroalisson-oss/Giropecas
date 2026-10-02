@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Building2, Users, FileText, CreditCard, Save, CheckCircle2 } from 'lucide-react';
+import { useAvisoEmissorNacional } from '@/lib/emissorNacional';
 import TaxasCartao from './TaxasCartao';
 import { useToast } from '@/components/ui/use-toast';
 import CertificadoLocalCard from '@/components/CertificadoLocalCard';
@@ -21,6 +22,8 @@ export default function Configuracoes() {
   const { isFiscal, noteLimit } = useLicense();
   const { toast } = useToast();
   const [form, setForm] = useState({});
+  // Pelo que está no formulário: o aviso aparece assim que o CEP muda a cidade.
+  const avisoMunicipio = useAvisoEmissorNacional({ city: form.city, state: form.state });
   const [saving, setSaving] = useState(false);
   const [users, setUsers] = useState([]);
 
@@ -228,6 +231,7 @@ export default function Configuracoes() {
                         <Label>Código IBGE do município</Label>
                         <Input className="mt-1" value={form.city_ibge_code || ''} onChange={e => set('city_ibge_code', e.target.value)} placeholder="7 dígitos" />
                         <p className="text-xs text-gray-500 mt-1">Preenchido pelo CEP da aba Empresa. Cipó-BA é 2907905.</p>
+                        {avisoMunicipio && <p className="text-xs text-red-700 mt-1">{avisoMunicipio}</p>}
                       </div>
                       <div>
                         <Label>CNAE principal</Label>

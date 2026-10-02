@@ -23,6 +23,7 @@ import {
   Download, Copy, Monitor, Unlock, Ban, Search, Loader2,
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import { useAvisoEmissorNacional } from '@/lib/emissorNacional';
 import { cn } from '@/lib/utils';
 
 export default function NFe() {
@@ -175,6 +176,7 @@ export default function NFe() {
   const limitReached = usadasNoMes >= noteLimit;
   const nearLimit = usadasNoMes >= noteLimit * 0.9;
   const pendencias = pendenciasNfse(company);
+  const avisoMunicipio = useAvisoEmissorNacional(company);
 
   const statusColor = (s) => NFE_STATUS_COLOR[s] || 'bg-gray-100 text-gray-700';
   const statusLabel = (s) => NFE_STATUS_LABEL[s] || s;
@@ -240,6 +242,20 @@ export default function NFe() {
               </div>
             </CardContent>
           </Card>
+
+          {avisoMunicipio && (
+            <Card className="mb-4 border-red-200 bg-red-50">
+              <CardContent className="p-4">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
+                  <div className="text-sm">
+                    <p className="font-semibold text-red-800">Município fora do Emissor Nacional</p>
+                    <p className="text-red-700 mt-1">{avisoMunicipio}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {pendencias.length > 0 && (
             <Card className="mb-4 border-amber-200 bg-amber-50">

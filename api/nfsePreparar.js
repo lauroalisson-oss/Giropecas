@@ -42,12 +42,17 @@ export default async function handler(req, res) {
     const barrouLicenca = checarLicenca(licenca);
     if (barrouLicenca) return erro(res, barrouLicenca.status, barrouLicenca.mensagem);
 
+    // A oficina vem antes da contagem: o mês do limite é o do relógio dela.
+    const { data: empresa } = await supabase
+      .from('companies').select('*').eq('id', perfil.company_id).maybeSingle();
+    if (!empresa) return erro(res, 404, 'Oficina não encontrada.');
+
     const { count: emitidas } = await supabase
       .from('nfe_records')
       .select('id', { count: 'exact', head: true })
       .eq('model', 'nfse')
       .eq('status', 'autorizada')
-      .gte('authorized_at', inicioDoMes().toISOString());
+      .gte('authorized_at', inicioDoMes(new Date(), empresa.state).toISOString());
 
     const barrouLimite = checarLimiteMensal(licenca, emitidas);
     if (barrouLimite) return erro(res, barrouLimite.status, barrouLimite.mensagem);
@@ -74,11 +79,7 @@ export default async function handler(req, res) {
     }
     const itens = ordem.service_items;
 
-    // --- 3. Empresa, cliente e cadastro dos serviços ----------------------
-    const { data: empresa } = await supabase
-      .from('companies').select('*').eq('id', perfil.company_id).maybeSingle();
-    if (!empresa) return erro(res, 404, 'Oficina não encontrada.');
-
+    // --- 3. Cliente e cadastro dos serviços -------------------------------
     const { data: cliente } = ordem.customer_id
       ? await supabase.from('customers').select('*').eq('id', ordem.customer_id).maybeSingle()
       : { data: null };

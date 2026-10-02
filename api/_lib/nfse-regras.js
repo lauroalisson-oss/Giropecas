@@ -8,6 +8,7 @@
 // Devolve null quando está liberado, ou { status, mensagem } com o motivo.
 
 import { limiteDeNotas } from '../../shared/licenca.js';
+import { inicioDoMesDaOficina } from '../../shared/relogio-fiscal.js';
 
 export function checarLicenca(licenca, agora = new Date()) {
   if (!licenca || licenca.status !== 'active') {
@@ -58,10 +59,9 @@ export function checarOrdem(ordem, notaExistente) {
   return null;
 }
 
-// Primeiro instante do mês corrente — recorte da contagem do limite.
-export function inicioDoMes(agora = new Date()) {
-  const d = new Date(agora);
-  d.setDate(1);
-  d.setHours(0, 0, 0, 0);
-  return d;
+// Primeiro instante do mês corrente NA OFICINA — recorte da contagem do
+// limite. Com setHours do servidor (UTC), o mês começava às 21h do último
+// dia do mês anterior: nota das 21h às 24h do dia 30 contava no mês seguinte.
+export function inicioDoMes(agora = new Date(), uf) {
+  return inicioDoMesDaOficina(agora, uf);
 }

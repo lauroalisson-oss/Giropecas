@@ -110,5 +110,33 @@ console.log('--- Ninguem volta a calcular "hoje" em UTC ---');
   ok(fora.length === 0, `nenhum "hoje" em UTC no codigo nem nos testes${fora.length ? ': ' + fora.join(', ') : ''}`);
 }
 
+console.log('--- No servidor, o relogio e o da oficina ---');
+// api/ roda na Vercel, em UTC: getDate()/getHours() de la sao o dia e a
+// hora de Greenwich. Foi assim que a NFS-e das 21h saia com a competencia
+// do dia seguinte. shared/ tambem roda la. Data de calendario no servidor
+// passa por shared/relogio-fiscal.js, que usa o fuso do estado da oficina.
+{
+  const { readdirSync, readFileSync } = await import('node:fs');
+  const path = await import('node:path');
+  const raiz = new URL('../../', import.meta.url).pathname;
+  const achados = [];
+  const andar = (dir) => {
+    for (const n of readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, n.name);
+      if (n.isDirectory()) andar(p);
+      else if (/\.(js|mjs)$/.test(n.name) && n.name !== 'relogio-fiscal.js') {
+        readFileSync(p, 'utf8').split('\n').forEach((linha, i) => {
+          if (/^\s*(\/\/|\*)/.test(linha)) return;
+          if (/\.(getDate|getHours|getMonth|getFullYear|getDay|setHours|setDate|getTimezoneOffset)\(/.test(linha)) {
+            achados.push(`${path.relative(raiz, p)}:${i + 1}`);
+          }
+        });
+      }
+    }
+  };
+  for (const d of ['api', 'shared']) andar(path.join(raiz, d));
+  ok(achados.length === 0, `nenhuma data pelo relogio do servidor em api/ e shared/${achados.length ? ': ' + achados.join(', ') : ''}`);
+}
+
 console.log(f === 0 ? '\n✅ DATAS OK' : `\n❌ ${f} falha(s)`);
 process.exit(f ? 1 : 0);

@@ -78,10 +78,6 @@ export default async function handler(req, res) {
       justificativa,
       producao,
       uf: empresa.state,
-      // Sempre 1: um pedido recusado não é registrado, então não consome
-      // a sequência; e um pedido aceito cancela a nota, que a partir daí
-      // não aceita outro cancelamento.
-      sequencia: 1,
     });
 
     return res.status(200).json({

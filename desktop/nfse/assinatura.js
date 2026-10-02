@@ -107,6 +107,15 @@ function montarIdDps({ codigoMunicipio, cnpjCpf, serie, numero }) {
 // A armadilha do E0714 vale para os dois: a referência tem de apontar
 // para o Id e a canonicalização tem de ser a C14N, senão o digest que o
 // governo calcula não bate com o nosso.
+//
+// Algoritmos: RSA-SHA1 e SHA1, porque é o que o XSD OFICIAL fixa
+// (xmldsig-core-schema.xsd do pacote da NFS-e Nacional — atributo
+// Algorithm com valor `fixed`). Assinava em SHA-256, e o Sefin valida o
+// XML contra o schema antes de conferir a assinatura: a nota seria
+// recusada por erro de schema (E1235). O teste nfse_xsd.mjs valida a DPS
+// e o cancelamento JÁ ASSINADOS contra o schema oficial.
+const ALG_ASSINATURA = 'http://www.w3.org/2000/09/xmldsig#rsa-sha1';
+const ALG_RESUMO = 'http://www.w3.org/2000/09/xmldsig#sha1';
 function assinarElemento(xml, { privateKeyPem, certificateBase64 }, nomeElemento, idInformado) {
   const doc = new DOMParser().parseFromString(xml, 'text/xml');
   const alvo = doc.getElementsByTagName(nomeElemento)[0];
@@ -117,14 +126,14 @@ function assinarElemento(xml, { privateKeyPem, certificateBase64 }, nomeElemento
 
   const sig = new SignedXml({
     privateKey: privateKeyPem,
-    signatureAlgorithm: 'http://www.w3.org/2001/04/xmldsig-more#rsa-sha256',
+    signatureAlgorithm: ALG_ASSINATURA,
     canonicalizationAlgorithm: 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
     getKeyInfoContent: () => `<X509Data><X509Certificate>${certificateBase64}</X509Certificate></X509Data>`,
   });
 
   sig.addReference({
     xpath: `//*[local-name(.)='${nomeElemento}']`,
-    digestAlgorithm: 'http://www.w3.org/2001/04/xmlenc#sha256',
+    digestAlgorithm: ALG_RESUMO,
     transforms: [
       'http://www.w3.org/2000/09/xmldsig#enveloped-signature',
       'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',

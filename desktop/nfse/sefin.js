@@ -29,7 +29,7 @@ const CAMINHOS = {
   homologacao: '/SefinNacional/nfse',
 };
 
-function requisicao({ host, caminho, corpo, pfx, senha, metodo = 'POST', timeout = 45000, aceita = 'application/json' }) {
+function requisicao({ host, caminho, corpo, credencial, metodo = 'POST', timeout = 45000, aceita = 'application/json' }) {
   return new Promise((resolve, reject) => {
     const dados = corpo ? Buffer.from(JSON.stringify(corpo), 'utf8') : null;
 
@@ -39,9 +39,10 @@ function requisicao({ host, caminho, corpo, pfx, senha, metodo = 'POST', timeout
       path: caminho,
       method: metodo,
       // É AQUI que o mTLS acontece: o Node apresenta o certificado da
-      // oficina no handshake.
-      pfx,
-      passphrase: senha,
+      // oficina no handshake. Chave e cadeia em PEM (ver certificado.js:
+      // o .pfx cru falha com certificados cifrados no formato antigo).
+      key: credencial?.key,
+      cert: credencial?.cert,
       headers: {
         'Content-Type': 'application/json',
         Accept: aceita,
@@ -169,27 +170,25 @@ function interpretar(resposta) {
 }
 
 // Envia a DPS assinada e compactada.
-async function enviarDps({ dpsXmlGZipB64, pfx, senha, producao = false }) {
+async function enviarDps({ dpsXmlGZipB64, credencial, producao = false }) {
   const ambiente = producao ? 'producao' : 'homologacao';
   const resposta = await requisicao({
     host: HOSTS[ambiente],
     caminho: CAMINHOS[ambiente],
     corpo: { dpsXmlGZipB64 },
-    pfx,
-    senha,
+    credencial,
   });
   return interpretar(resposta);
 }
 
 // Consulta uma NFS-e já emitida pela chave de acesso.
-async function consultarNfse({ chaveAcesso, pfx, senha, producao = false }) {
+async function consultarNfse({ chaveAcesso, credencial, producao = false }) {
   const ambiente = producao ? 'producao' : 'homologacao';
   const resposta = await requisicao({
     host: HOSTS[ambiente],
     caminho: `${CAMINHOS[ambiente]}/${encodeURIComponent(chaveAcesso)}`,
     metodo: 'GET',
-    pfx,
-    senha,
+    credencial,
   });
   return interpretar(resposta);
 }
@@ -197,14 +196,13 @@ async function consultarNfse({ chaveAcesso, pfx, senha, producao = false }) {
 // Registra um evento (cancelamento) na nota.
 //
 // Endpoint confirmado no manual oficial: POST /nfse/{chaveAcesso}/eventos
-async function enviarEvento({ chaveAcesso, pedidoXmlGZipB64, pfx, senha, producao = false }) {
+async function enviarEvento({ chaveAcesso, pedidoXmlGZipB64, credencial, producao = false }) {
   const ambiente = producao ? 'producao' : 'homologacao';
   const resposta = await requisicao({
     host: HOSTS[ambiente],
     caminho: `${CAMINHOS[ambiente]}/${encodeURIComponent(chaveAcesso)}/eventos`,
     corpo: { pedidoRegistroEventoXmlGZipB64: pedidoXmlGZipB64 },
-    pfx,
-    senha,
+    credencial,
   });
   return interpretar(resposta);
 }
@@ -214,15 +212,14 @@ async function enviarEvento({ chaveAcesso, pedidoXmlGZipB64, pfx, senha, produca
 // É o que resolve a emissão que caiu no meio: sem isto, a oficina não
 // teria como saber se a nota existe lá, e só descobriria ao tentar de
 // novo e levar recusa por duplicidade.
-async function consultarDps({ idDps, pfx, senha, producao = false }) {
+async function consultarDps({ idDps, credencial, producao = false }) {
   const ambiente = producao ? 'producao' : 'homologacao';
   const base = CAMINHOS[ambiente].replace(/\/nfse$/, '');
   const resposta = await requisicao({
     host: HOSTS[ambiente],
     caminho: `${base}/dps/${encodeURIComponent(idDps)}`,
     metodo: 'GET',
-    pfx,
-    senha,
+    credencial,
   });
 
   // 404 aqui é resposta útil, não erro: quer dizer que a DPS não gerou
@@ -239,7 +236,7 @@ async function consultarDps({ idDps, pfx, senha, producao = false }) {
 // O ADN às vezes responde 429/5xx (fora do ar, limite de pedidos): o erro
 // volta com a explicação, e o XML da nota continua sendo o documento que
 // vale — o DANFSe é só a representação impressa dele.
-async function baixarDanfse({ chaveAcesso, pfx, senha, producao = false }) {
+async function baixarDanfse({ chaveAcesso, credencial, producao = false }) {
   const chave = String(chaveAcesso || '').replace(/\D/g, '');
   if (chave.length !== 50) throw new Error('Chave de acesso inválida para baixar o DANFSe.');
   const ambiente = producao ? 'producao' : 'homologacao';
@@ -248,8 +245,7 @@ async function baixarDanfse({ chaveAcesso, pfx, senha, producao = false }) {
     caminho: `/danfse/${chave}`,
     metodo: 'GET',
     aceita: 'application/pdf',
-    pfx,
-    senha,
+    credencial,
   });
   return interpretarDanfse(resposta);
 }

@@ -12,9 +12,14 @@ const HOSTS = {
   homologacao: 'sefin.producaorestrita.nfse.gov.br',
 };
 
+// Os dois ambientes têm o MESMO caminho. Homologação estava com
+// '/API/SefinNacional/nfse' — "/API/SefinNacional/docs" é só a página da
+// documentação (swagger); a API em si responde em /SefinNacional, como
+// usam os clientes que emitem de fato (pynfse-nacional, nfse-nacional
+// em PHP). Com /API, a primeira emissão em homologação daria 404.
 const CAMINHOS = {
   producao: '/SefinNacional/nfse',
-  homologacao: '/API/SefinNacional/nfse',
+  homologacao: '/SefinNacional/nfse',
 };
 
 function requisicao({ host, caminho, corpo, pfx, senha, metodo = 'POST', timeout = 45000 }) {
@@ -73,34 +78,84 @@ function requisicao({ host, caminho, corpo, pfx, senha, metodo = 'POST', timeout
   });
 }
 
+// Campo de um objeto do Sefin, sem depender de maiúscula: a lista de
+// erros vem como { Codigo, Descricao, Complemento } — com a inicial
+// maiúscula —, e em versões antigas em minúscula.
+function campo(obj, ...nomes) {
+  if (!obj || typeof obj !== 'object') return undefined;
+  const procurados = nomes.map(n => n.toLowerCase());
+  for (const [k, v] of Object.entries(obj)) {
+    if (procurados.includes(k.toLowerCase()) && v !== null && v !== undefined && v !== '') return v;
+  }
+  return undefined;
+}
+
+// Lista de erros, em qualquer dos formatos que o Sefin usa.
+function errosDa(json) {
+  if (Array.isArray(json)) return json;
+  const lista = campo(json, 'erros', 'erro', 'errors');
+  return Array.isArray(lista) ? lista : [];
+}
+
 // Traduz a resposta do Sefin numa forma que a tela entende.
+//
+// Lia os erros como e.codigo / e.descricao, e o Sefin manda Codigo /
+// Descricao / Complemento: a recusa chegava à tela como mensagem VAZIA e
+// sem código — o lojista sem saber o que corrigir, e o código (E0xxx)
+// perdido.
 function interpretar(resposta) {
   const { status, json, texto } = resposta;
 
   if (status === 201 || status === 200) {
-    const chave = json?.chaveAcesso || json?.chave_acesso || null;
+    // Evento (cancelamento): o resultado vem em retEvento; cStat 144 é
+    // "evento registrado". Outro cStat, mesmo com HTTP 200, é recusa.
+    const retEvento = campo(json, 'retEvento');
+    if (retEvento) {
+      const cStat = campo(retEvento, 'cStat');
+      if (cStat !== undefined && String(cStat) !== '144') {
+        return {
+          ok: false, status,
+          erro: `${cStat} ${campo(retEvento, 'xMotivo') || 'Evento recusado pelo Sefin.'}`.trim(),
+          codigos: [String(cStat)], bruto: json,
+        };
+      }
+      return { ok: true, status, chaveAcesso: null, xmlNfse: null, bruto: json };
+    }
+
+    const chave = campo(json, 'chaveAcesso', 'chave_acesso');
     let xmlNfse = null;
-    const b64 = json?.nfseXmlGZipB64 || json?.nfse_xml_gzip_b64;
+    const b64 = campo(json, 'nfseXmlGZipB64', 'nfse_xml_gzip_b64');
     if (b64) {
       try { xmlNfse = gunzipSync(Buffer.from(b64, 'base64')).toString('utf8'); } catch { /* fica sem o XML */ }
     }
-    return { ok: true, status, chaveAcesso: chave, xmlNfse, bruto: json };
+    return { ok: true, status, chaveAcesso: chave || null, xmlNfse, bruto: json };
   }
 
-  // Um evento (cancelamento) responde com retEvento, sem chave de acesso.
+  // Um evento pode responder sem corpo.
   if (status === 204) return { ok: true, status, chaveAcesso: null, xmlNfse: null, bruto: null };
 
-  // O Sefin devolve a lista de erros com código e descrição.
-  const erros = json?.erros || json?.errors || [];
-  const mensagem = erros.length
-    ? erros.map(e => `${e.codigo || e.code || ''} ${e.descricao || e.mensagem || e.message || ''}`.trim()).join(' | ')
-    : (json?.mensagem || json?.message || texto || `HTTP ${status}`);
+  // O Sefin devolve a lista de erros com código, descrição e complemento —
+  // o complemento costuma ser o que diz QUAL campo está errado.
+  const erros = errosDa(json);
+  const linhas = erros.map((e) => {
+    const codigo = campo(e, 'codigo', 'code');
+    const descricao = campo(e, 'descricao', 'mensagem', 'message');
+    const complemento = campo(e, 'complemento');
+    return [codigo, descricao, complemento ? `(${complemento})` : null].filter(Boolean).join(' ');
+  }).filter(Boolean);
+
+  const mensagem = linhas.length
+    ? linhas.join(' | ')
+    : (campo(json, 'mensagem', 'message', 'descricao') || (texto ? texto.slice(0, 500) : '') || `HTTP ${status}`);
 
   return {
     ok: false,
     status,
     erro: mensagem,
-    codigos: erros.map(e => e.codigo || e.code).filter(Boolean),
+    codigos: [
+      ...erros.map(e => campo(e, 'codigo', 'code')),
+      campo(json, 'codigo'),
+    ].filter(Boolean).map(String),
     bruto: json,
   };
 }
@@ -171,4 +226,4 @@ async function consultarDps({ idDps, pfx, senha, producao = false }) {
   return r.ok ? { ...r, existe: true } : r;
 }
 
-module.exports = { enviarDps, consultarNfse, enviarEvento, consultarDps, HOSTS, CAMINHOS };
+module.exports = { enviarDps, consultarNfse, enviarEvento, consultarDps, interpretar, HOSTS, CAMINHOS };

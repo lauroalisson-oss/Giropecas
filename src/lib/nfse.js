@@ -17,7 +17,9 @@
 // para o provedor, nem para lugar nenhum.
 
 import { base44 } from '@/api/base44Client';
-export { pendenciasNfse, nfseNoMes, idDpsDaNota, escolherXml, producaoDaNota, MODELO_LABEL } from './nfse-dados';
+export {
+  pendenciasNfse, nfseNoMes, idDpsDaNota, escolherXml, producaoDaNota, orientacaoErroSefin, MODELO_LABEL,
+} from './nfse-dados';
 import { escolherXml } from './nfse-dados';
 
 // A ponte é injetada pelo aplicativo desktop (preload.js). Num navegador

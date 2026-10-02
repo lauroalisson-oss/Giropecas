@@ -4,7 +4,7 @@
 // contasse diferente, o lojista veria folga onde a emissão já está barrada
 // — e descobriria só na hora de emitir para o cliente.
 
-import { pendenciasNfse, nfseNoMes, idDpsDaNota, escolherXml, notaAutorizadaDe, motivoNaoExcluir, producaoDaNota } from '../../src/lib/nfse-dados.js';
+import { pendenciasNfse, nfseNoMes, idDpsDaNota, escolherXml, notaAutorizadaDe, motivoNaoExcluir, producaoDaNota, orientacaoErroSefin } from '../../src/lib/nfse-dados.js';
 import { montarDps } from '../../api/_lib/nfse-dps.js';
 
 let f = 0;
@@ -171,6 +171,14 @@ ok(producaoDaNota({ xml_content: '<NFSe><infNFSe><DPS><infDPS><tpAmb>1</tpAmb></
   'le tambem o XML devolvido pelo Sefin');
 ok(producaoDaNota({}, { nfe_environment: 'producao' }) === true && producaoDaNota({}, {}) === false,
   'sem XML: a configuracao da oficina');
+
+console.log('--- O que fazer diante de uma recusa do Sefin ---');
+const e39 = orientacaoErroSefin('E0039 O município emissor deve estar parametrizado para usar os emissores públicos nacionais');
+ok(e39.length === 1 && /prefeitura/.test(e39[0]) && /emissores públicos nacionais/.test(e39[0]), 'E0039: falar com a prefeitura, com o termo certo');
+ok(orientacaoErroSefin('E1235 Falha no schema | E0714 Assinatura invalida').length === 2, 'dois codigos: duas orientacoes');
+ok(orientacaoErroSefin('E0039 x | E0039 y').length === 1, 'codigo repetido: uma orientacao so');
+ok(orientacaoErroSefin('E9999 desconhecido').length === 0, 'codigo desconhecido: nada inventado');
+ok(orientacaoErroSefin(null).length === 0 && orientacaoErroSefin('Sem conexão com o Sefin').length === 0, 'sem codigo: nada');
 
 console.log(f === 0 ? '\n✅ TELA DE NOTAS OK' : `\n❌ ${f} falha(s)`);
 process.exit(f ? 1 : 0);

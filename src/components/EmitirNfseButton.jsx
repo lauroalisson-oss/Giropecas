@@ -6,7 +6,9 @@ import {
 import { Receipt, Loader2, AlertTriangle, Monitor, CheckCircle2 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { useLicense } from '@/lib/LicenseContext';
-import { emitirNfse, temPonteDesktop, situacaoCertificado, AVISO_SEM_PONTE } from '@/lib/nfse';
+import {
+  emitirNfse, temPonteDesktop, situacaoCertificado, orientacaoErroSefin, AVISO_SEM_PONTE,
+} from '@/lib/nfse';
 
 // Emissão da NFS-e (nota de serviço) de uma OS.
 //
@@ -41,7 +43,13 @@ export default function EmitirNfseButton({ workOrderId, temServicos = true, size
       });
       onEmitted?.(r);
     } catch (e) {
-      toast({ title: 'Não foi possível emitir', description: e.message, variant: 'destructive' });
+      // A recusa do Sefin vem técnica; o que fazer vai junto, quando se sabe.
+      const orientacao = orientacaoErroSefin(e.message);
+      toast({
+        title: 'Não foi possível emitir',
+        description: [e.message, ...orientacao].join(' — '),
+        variant: 'destructive',
+      });
     } finally {
       setLoading(false);
       setEtapa('');

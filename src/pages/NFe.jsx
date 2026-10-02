@@ -7,7 +7,7 @@ import { formatCurrency, formatDateTime } from '@/lib/formatters';
 import { NFE_STATUS_LABEL, NFE_STATUS_COLOR } from '@/lib/fiscal';
 import {
   baixarXml, baixarDanfse, consultarNaSefin, liberarNotaPresa, temPonteDesktop, producaoDaNota,
-  pendenciasNfse, nfseNoMes, idDpsDaNota, MODELO_LABEL,
+  pendenciasNfse, nfseNoMes, idDpsDaNota, orientacaoErroSefin, MODELO_LABEL,
   cancelarNfse, verificarNotaPresa, MOTIVOS_CANCELAMENTO,
 } from '@/lib/nfse';
 import {
@@ -375,6 +375,9 @@ export default function NFe() {
                         {nota.rejection_reason && (
                           <p className="text-xs text-red-600 mt-1">{nota.rejection_reason}</p>
                         )}
+                        {nota.rejection_reason && orientacaoErroSefin(nota.rejection_reason).map(o => (
+                          <p key={o} className="text-xs text-gray-700 mt-1 bg-amber-50 border border-amber-200 rounded px-2 py-1">{o}</p>
+                        ))}
 
                         {presa && (
                           <p className="text-xs text-amber-600 mt-1">

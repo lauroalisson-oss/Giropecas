@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Plus, Search, Wrench, Clock, Check, AlertTriangle } from 'lucide-react';
 import { resolverCTribNac } from '../../shared/ctribnac.js';
+import { codigoTributacaoMunicipal } from '../../shared/nfse-campos.js';
 
 const EMPTY_SERVICE = {
   name: '', description: '', standard_time_hours: 1, labor_price: 0, category: '', code: '',
@@ -102,8 +103,12 @@ export default function Servicos() {
     s.category?.toLowerCase().includes(search.toLowerCase())
   );
 
+  const codigoMunicipal = codigoTributacaoMunicipal(form.municipal_service_code);
+
   const handleSave = async () => {
     if (!form.name.trim()) return;
+    // Fora do padrão, a nota deste serviço seria recusada na emissão.
+    if (codigoMunicipal.erro) return;
     setSaving(true);
     const payload = {
       ...form,
@@ -111,6 +116,7 @@ export default function Servicos() {
       labor_price: parseFloat(form.labor_price) || 0,
       standard_time_hours: parseFloat(form.standard_time_hours) || 1,
       iss_rate: form.iss_rate === '' ? 0 : (parseFloat(form.iss_rate) || 0),
+      municipal_service_code: codigoMunicipal.codigo,
       // Vazio significa "nao se repete" — nao pode virar zero.
       interval_months: form.interval_months === '' ? null : (parseFloat(form.interval_months) || null),
       interval_km: form.interval_km === '' ? null : (parseFloat(form.interval_km) || null),
@@ -221,7 +227,12 @@ export default function Servicos() {
                 <div>
                   <label className="text-xs font-medium text-gray-600">Código de tributação do município</label>
                   <Input className="mt-1" value={form.municipal_service_code}
-                    onChange={e => setForm(p => ({ ...p, municipal_service_code: e.target.value }))} placeholder="varia por prefeitura" />
+                    onChange={e => setForm(p => ({ ...p, municipal_service_code: e.target.value }))} placeholder="3 dígitos, ex.: 001" />
+                  {codigoMunicipal.erro ? (
+                    <p className="text-xs text-red-600 mt-1">{codigoMunicipal.erro}</p>
+                  ) : (
+                    <p className="text-xs text-gray-400 mt-1">Opcional. Só preencha se a prefeitura passou esse código.</p>
+                  )}
                 </div>
                 <div>
                   <label className="text-xs font-medium text-gray-600">Alíquota ISS (%)</label>
@@ -242,7 +253,7 @@ export default function Servicos() {
             </div>
 
             <div className="flex gap-2 pt-1">
-              <Button onClick={handleSave} disabled={saving} className="bg-red-600 hover:bg-red-700 text-white">{saving ? 'Salvando...' : 'Salvar'}</Button>
+              <Button onClick={handleSave} disabled={saving || !!codigoMunicipal.erro} className="bg-red-600 hover:bg-red-700 text-white">{saving ? 'Salvando...' : 'Salvar'}</Button>
               <Button variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>
             </div>
           </CardContent>

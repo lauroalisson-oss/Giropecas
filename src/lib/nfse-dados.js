@@ -4,6 +4,8 @@
 // ve (pendencias de cadastro, contagem do mes), e que precisa valer igual
 // ao que o servidor bloqueia. Sendo puro, da para conferir caso a caso.
 
+import { inscricaoMunicipal } from '../../shared/nfse-campos.js';
+
 export const MODELO_LABEL = {
   nfse: 'NFS-e',
   nfe: 'NF-e',
@@ -18,6 +20,7 @@ export function pendenciasNfse(empresa) {
   const p = [];
   if (!empresa?.cnpj) p.push('CNPJ da oficina');
   if (!empresa?.im) p.push('Inscrição Municipal');
+  else if (inscricaoMunicipal(empresa.im).erro) p.push('Inscrição Municipal com até 15 caracteres');
 
   // Exatamente 7 dígitos: completar com zero mudaria de município, e a
   // nota sairia atribuída à cidade errada em vez de falhar.
@@ -25,6 +28,7 @@ export function pendenciasNfse(empresa) {
     p.push('Código IBGE do município (7 dígitos)');
   }
   if (!Number(empresa?.iss_rate)) p.push('Alíquota de ISS');
+  else if (Number(empresa.iss_rate) > 5) p.push('Alíquota de ISS de no máximo 5%');
   return p;
 }
 
